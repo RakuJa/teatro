@@ -1,4 +1,5 @@
 use biquad::{Biquad, DirectForm1};
+use log::warn;
 use rodio::Source;
 use std::sync::{Arc, Mutex};
 
@@ -14,9 +15,13 @@ where
     type Item = f32;
 
     fn next(&mut self) -> Option<f32> {
-        let sample = self.source.next()?;
-        let mut filter = self.filter.lock().unwrap();
-        Some(filter.run(sample))
+        if let Ok(mut filter) = self.filter.lock() {
+            let sample = self.source.next()?;
+            Some(filter.run(sample))
+        } else {
+            warn!("Failed to lock filter, could not advance filter iterator");
+            None
+        }
     }
 }
 
