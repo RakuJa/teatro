@@ -1,24 +1,86 @@
 use crate::FilterData;
 use crate::audio::playback_handler;
+use crate::states::audio_sinks::AudioSinks;
+use crate::states::playlist_data::{PlaylistData, Track};
 use crate::states::visualizer::AkaiData;
 use flume::Sender;
 use log::warn;
+use ramidier::io::input_data::MidiInputData;
+use ramidier::io::output::ChannelOutput;
 use rodio::Sink;
 use std::sync::{Arc, Mutex};
 
-pub fn play_song(files: &[String], sound_queue: &Sink, filter: &Arc<Mutex<FilterData>>) {
-    if let Some(first_track) = files.first() {
-        let () = sound_queue.clear();
-        let _ = playback_handler::play_track(sound_queue, first_track.as_str(), Some(filter));
-        files.iter().skip(1).for_each(|file| {
-            let _ = playback_handler::add_track_to_queue(sound_queue, file.as_str(), false);
-        });
-    }
-}
+pub trait MidiHandler {
+    type Group;
 
-pub fn update_gui(tx_channel: &Sender<AkaiData>, data: AkaiData) {
-    match tx_channel.send(data) {
-        Ok(()) => (),
-        _ => warn!("Failed to send data to update GUI"),
+    type State;
+    fn refresh(
+        stale_data: &AkaiData,
+        tx_data: &Sender<AkaiData>,
+        audio_sinks: &AudioSinks,
+    ) -> AkaiData;
+
+    fn update_gui(tx_channel: &Sender<AkaiData>, data: &AkaiData) {
+        match tx_channel.send(data.clone()) {
+            Ok(()) => (),
+            _ => warn!("Failed to send data to update GUI"),
+        }
     }
+
+    fn get_current_playlist_state(old_state: PlaylistData, sink: &Sink) -> PlaylistData {
+        let curr_track_number =
+            old_state.tracks.len() as u64 - playback_handler::get_n_of_remaining_tracks(sink);
+        PlaylistData {
+            tracks: old_state
+                .tracks
+                .into_iter()
+                .enumerate()
+                .map(|(i, x)| Track {
+                    file_path: x.file_path.clone(),
+                    track_length: x.track_length,
+                    elapsed_seconds: if i == curr_track_number as usize {
+                        playback_handler::get_current_track_elapsed_time(sink)
+                    } else {
+                        0
+                    },
+                })
+                .collect(),
+            current_track: curr_track_number,
+        }
+    }
+
+    fn play_song(
+        files: &[String],
+        sound_queue: &Sink,
+        filter: &Arc<Mutex<FilterData>>,
+        volume: Option<f32>,
+    ) -> Option<PlaylistData> {
+        let mut tracks = vec![];
+        files.first().map(|first_track| {
+            let () = sound_queue.clear();
+            if let Some(v) = volume {
+                playback_handler::change_volume(sound_queue, v);
+            }
+            if let Ok(track) =
+                playback_handler::play_track(sound_queue, first_track.as_str(), Some(filter))
+            {
+                tracks.push(track);
+            }
+            files.iter().skip(1).for_each(|file| {
+                if let Ok(track) =
+                    playback_handler::add_track_to_queue(sound_queue, file.as_str(), false)
+                {
+                    tracks.push(track);
+                }
+            });
+            PlaylistData::builder().tracks(tracks).build()
+        })
+    }
+
+    fn listener(
+        midi_out: &mut ChannelOutput,
+        stamp: u64,
+        msg: &MidiInputData<Self::Group>,
+        state: &mut Self::State,
+    );
 }

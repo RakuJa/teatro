@@ -1,9 +1,15 @@
 use crate::MusicState;
 use crate::audio::playback_handler;
-use crate::hardware_handler::midi_handler::{play_song, update_gui};
-use crate::os_explorer::explorer::search_files_in_path;
+use crate::hardware_handler::midi_handler::MidiHandler;
+use crate::os_explorer::explorer::{
+    get_album_name_from_folder_in_path, map_to_indexed_vec, search_files_in_path,
+};
+use crate::states::audio_sinks::AudioSinks;
+use crate::states::button_states::ToggleStates;
+use crate::states::filter_data::FilterData;
+use crate::states::visualizer::AkaiData;
 use biquad::Type;
-use bitflags::bitflags;
+use flume::Sender;
 use log::{debug, info, warn};
 use ramidier::enums::button::knob_ctrl::KnobCtrlKey;
 use ramidier::enums::button::pads::PadKey;
@@ -13,25 +19,8 @@ use ramidier::enums::led_light::color::LedColor;
 use ramidier::enums::led_light::mode::LedMode;
 use ramidier::io::input_data::MidiInputData;
 use ramidier::io::output::ChannelOutput;
-
-bitflags! {
-    #[derive(Debug, Default, Clone, Copy)]
-    pub struct ToggleStates: u16 {
-        const CLIP_STOP = 1 << 0;
-        const SOLO      = 1 << 1;
-        const MUTE      = 1 << 2;
-        const REC_ARM   = 1 << 3;
-        const SELECT    = 1 << 4;
-        const STOP_ALL  = 1 << 5;
-        const VOLUME    = 1 << 6;
-        const PAN       = 1 << 7;
-        const SEND      = 1 << 8;
-        const DEVICE    = 1 << 9;
-        const SHIFT     = 1 << 10;
-        const FILTER    = 1 << 11;
-        const START     = 1 << 12;
-    }
-}
+use rodio::Sink;
+use std::sync::{Arc, Mutex};
 
 const KNOB_INCREMENT: f32 = 0.005;
 
@@ -48,179 +37,306 @@ impl ToggleStates {
     }
 }
 
-fn handle_pad(pad: PadKey, state: &mut MusicState, midi_out: &mut ChannelOutput) {
-    let note = pad.get_index();
+pub struct PadHandler;
+impl MidiHandler for PadHandler {
+    type Group = PadsAndKnobsInputGroup;
+    type State = MusicState;
 
-    // Turn off previous pad
-    if let Some(l_p) = state.data.last_pad_pressed {
-        let _ = midi_out.set_pad_led(LedMode::On10Percent, l_p, LedColor::Off);
+    fn refresh(
+        stale_data: &AkaiData,
+        tx_data: &Sender<AkaiData>,
+        audio_sinks: &AudioSinks,
+    ) -> AkaiData {
+        let x = stale_data.current_playlist.as_ref().map_or_else(
+            || stale_data.clone(),
+            |playlist| AkaiData {
+                music_folder: stale_data.music_folder.clone(),
+                sound_folder: stale_data.sound_folder.clone(),
+                pad_labels: stale_data.pad_labels.clone(),
+                knob_values: stale_data.knob_values.clone(),
+                button_states: stale_data.button_states,
+                last_pad_pressed: stale_data.last_pad_pressed,
+                current_playlist: Some(Self::get_current_playlist_state(
+                    playlist.clone(),
+                    &audio_sinks.music_queue,
+                )),
+            },
+        );
+        Self::update_gui(tx_data, &x);
+        x
     }
-
-    state.data.last_pad_pressed = Some(note);
-    let prefix = format!("{note:02}_");
-    if let Ok(res) = search_files_in_path(state.data.music_folder.as_str(), prefix.as_str()) {
-        info!("playing the following audio folder: {}", res.0.display());
-        let files = res
-            .1
-            .iter()
-            .filter_map(|x| x.to_str())
-            .map(ToString::to_string)
-            .collect::<Vec<String>>();
-        match &state.audio_sinks.lock() {
-            Ok(audio_sinks) => {
-                play_song(&files, &audio_sinks.music_queue, &state.music_filter);
+    fn listener(
+        midi_out: &mut ChannelOutput,
+        stamp: u64,
+        msg: &MidiInputData<Self::Group>,
+        state: &mut Self::State,
+    ) {
+        debug!("{stamp}: {msg:?}");
+        if msg.value > 0 {
+            Self::handle_button_press(midi_out, msg, state);
+        } else {
+            match msg.input_group {
+                PadsAndKnobsInputGroup::Left
+                | PadsAndKnobsInputGroup::Right
+                | PadsAndKnobsInputGroup::Up
+                | PadsAndKnobsInputGroup::Down => {
+                    change_button_status(midi_out, false, msg.input_group, LedColor::Green);
+                }
+                _ => {}
             }
-            _ => warn!("Failed to get audio sink lock, cannot play song"),
         }
-    } else {
-        warn!("No folder associated with the given button {note}");
+        if let Ok(mut data) = state.data.lock()
+            && let Ok(audio_sink) = state.audio_sinks.lock()
+        {
+            let x = Self::refresh(&data, &state.tx_data, &audio_sink);
+            data.copy_data(x);
+            Self::update_gui(&state.tx_data, &data);
+        }
     }
-    let color: LedColor = (pad.get_index() + 1).try_into().unwrap_or(LedColor::Green);
-    let _ = midi_out.set_pad_led(LedMode::On100Percent, note, color);
 }
 
-fn handle_knob(index: u8, value: u8, state: &mut MusicState) {
-    let delta = if value > 63 { -1.0 } else { 1.0 };
-    match index {
-        1 => {
-            if !state.data.button_states.contains(ToggleStates::MUTE) {
-                match &state.audio_sinks.lock() {
-                    Ok(audio_sinks) => {
-                        playback_handler::increase_volume(
-                            &audio_sinks.music_queue,
-                            delta * KNOB_INCREMENT,
-                        );
-                    }
-                    _ => {
-                        warn!("Failed to get audio sink lock, could not change volume");
-                    }
+impl PadHandler {
+    pub fn get_pad_albums_list(music_folder: &str) -> anyhow::Result<Vec<String>> {
+        Ok(
+            map_to_indexed_vec(get_album_name_from_folder_in_path(music_folder)?)
+                .into_iter()
+                .flatten()
+                .collect(),
+        )
+    }
+
+    pub fn update_pad_albums_list(
+        stale_data: &AkaiData,
+        tx_data: &Sender<AkaiData>,
+    ) -> anyhow::Result<AkaiData> {
+        let data = AkaiData {
+            music_folder: stale_data.music_folder.clone(),
+            sound_folder: stale_data.sound_folder.clone(),
+            pad_labels: Self::get_pad_albums_list(&stale_data.music_folder)?,
+            knob_values: stale_data.knob_values.clone(),
+            button_states: stale_data.button_states,
+            last_pad_pressed: stale_data.last_pad_pressed,
+            current_playlist: stale_data.current_playlist.clone(),
+        };
+        Self::update_gui(tx_data, &data);
+        Ok(data)
+    }
+
+    fn toggle_state_button(
+        state: &MusicState,
+        midi_out: &mut ChannelOutput,
+        toggle_state: ToggleStates,
+        input_group: PadsAndKnobsInputGroup,
+    ) {
+        if let Ok(mut data) = state.data.lock() {
+            data.button_states
+                .toggle_button(toggle_state, midi_out, input_group, LedColor::Green);
+        } else {
+            warn!("Could not lock mutex for toggle button: {toggle_state:?}");
+        }
+    }
+    fn handle_button_press(
+        midi_out: &mut ChannelOutput,
+        msg: &MidiInputData<PadsAndKnobsInputGroup>,
+        state: &MusicState,
+    ) {
+        match msg.input_group {
+            PadsAndKnobsInputGroup::Pads(ref pad) => Self::handle_pad(*pad, state, midi_out),
+            PadsAndKnobsInputGroup::Knob(index) => Self::handle_knob(index, msg.value, state),
+            PadsAndKnobsInputGroup::ResumePause => Self::handle_resume_pause(state, midi_out),
+            PadsAndKnobsInputGroup::SoftKeys(key) => Self::handle_soft_key(key, state, midi_out),
+            PadsAndKnobsInputGroup::KnobCtrl(key) => {
+                Self::handle_knob_ctrl(key, state, midi_out);
+            }
+            PadsAndKnobsInputGroup::StopAllClips => {
+                Self::toggle_state_button(state, midi_out, ToggleStates::STOP_ALL, msg.input_group);
+            }
+            PadsAndKnobsInputGroup::Shift => {
+                Self::toggle_state_button(state, midi_out, ToggleStates::SHIFT, msg.input_group);
+            }
+            PadsAndKnobsInputGroup::Start => {
+                Self::toggle_state_button(state, midi_out, ToggleStates::START, msg.input_group);
+            }
+            PadsAndKnobsInputGroup::Left
+            | PadsAndKnobsInputGroup::Up
+            | PadsAndKnobsInputGroup::Down => {
+                change_button_status(midi_out, true, msg.input_group, LedColor::Green);
+            }
+            PadsAndKnobsInputGroup::Right => {
+                change_button_status(midi_out, true, msg.input_group, LedColor::Green);
+                if let Ok(audio_sinks) = state.audio_sinks.lock() {
+                    audio_sinks.music_queue.skip_one();
+                } else {
+                    warn!("Failed to get audio sink lock, cannot skip music");
                 }
             }
         }
-        2 => playback_handler::change_filter_frequency_value(
-            &state.music_filter,
-            delta,
-            Type::LowPass,
-        ),
-        3 => playback_handler::change_filter_frequency_value(
-            &state.music_filter,
-            delta,
-            Type::HighPass,
-        ),
-        4 => playback_handler::change_filter_frequency_value(
-            &state.music_filter,
-            delta,
-            Type::SinglePoleLowPassApprox,
-        ),
-        5 => match &state.audio_sinks.lock() {
-            Ok(audio_sinks) => {
-                playback_handler::increase_volume(
-                    &audio_sinks.ambience_queue,
-                    delta * KNOB_INCREMENT,
+    }
+
+    fn handle_pad(pad: PadKey, state: &MusicState, midi_out: &mut ChannelOutput) {
+        let note = pad.get_index();
+
+        if let Ok(mut data) = state.data.lock() {
+            // Turn off previous pad
+            if let Some(l_p) = data.last_pad_pressed {
+                let _ = midi_out.set_pad_led(LedMode::On10Percent, l_p, LedColor::Off);
+            }
+
+            data.last_pad_pressed = Some(note);
+            let prefix = format!("{note:02}_");
+            if let Ok(res) = search_files_in_path(data.music_folder.as_str(), prefix.as_str()) {
+                info!("playing the following audio folder: {}", res.0.display());
+                let mut files = res
+                    .1
+                    .iter()
+                    .filter_map(|x| x.to_str())
+                    .map(ToString::to_string)
+                    .collect::<Vec<String>>();
+                if data.button_states.contains(ToggleStates::SELECT) {
+                    fastrand::shuffle(files.as_mut_slice());
+                }
+                if let Ok(audio_sinks) = state.audio_sinks.lock() {
+                    data.current_playlist = Self::play_song(
+                        &files,
+                        &audio_sinks.music_queue,
+                        &state.music_filter,
+                        data.get_music_volume(),
+                    );
+                } else {
+                    warn!("Failed to get audio sink lock, cannot play song");
+                }
+            } else {
+                warn!("No folder associated with the given button {note}");
+            }
+            let color: LedColor = (pad.get_index() + 1).try_into().unwrap_or(LedColor::Green);
+            let _ = midi_out.set_pad_led(LedMode::On100Percent, note, color);
+        } else {
+            warn!("Failed to get a lock on data. Will not handle pad action");
+        }
+    }
+
+    fn handle_knob(index: u8, value: u8, state: &MusicState) {
+        let delta = if value > 63 { -1.0 } else { 1.0 };
+        if let Ok(mut data) = state.data.lock() {
+            match index {
+                1 => {
+                    if !data.button_states.contains(ToggleStates::MUTE) {
+                        adjust_queue_volume(state, |s| &s.music_queue, delta);
+                    }
+                }
+                2..=4 => {
+                    let filter_type = match index {
+                        2 => Type::LowPass,
+                        3 => Type::HighPass,
+                        4 => Type::SinglePoleLowPassApprox,
+                        _ => unreachable!(
+                            "The previous guard should always filter number higher than 4 and lower than 2"
+                        ),
+                    };
+                    adjust_filter(&state.music_filter, delta, filter_type);
+                }
+                5 => adjust_queue_volume(state, |s| &s.ambience_queue, delta),
+                6..=8 => {
+                    let filter_type = match index {
+                        6 => Type::LowPass,
+                        7 => Type::HighPass,
+                        8 => Type::SinglePoleLowPassApprox,
+                        _ => unreachable!(),
+                    };
+                    adjust_filter(&state.sound_filter, delta, filter_type);
+                }
+                _ => {}
+            }
+            if !data.button_states.contains(ToggleStates::MUTE) {
+                data.knob_values.entry(index).and_modify(|v| {
+                    *v += delta * KNOB_INCREMENT;
+                    *v = v.clamp(0.0, 1.0);
+                });
+            }
+        } else {
+            warn!("Failed to get a lock on data. Will not handle knob action");
+        }
+    }
+
+    fn handle_resume_pause(state: &MusicState, midi_out: &mut ChannelOutput) {
+        if let Ok(mut data) = state.data.lock() {
+            data.button_states.toggle_button(
+                ToggleStates::FILTER,
+                midi_out,
+                PadsAndKnobsInputGroup::ResumePause,
+                LedColor::Green,
+            );
+
+            let filter_type = if data.button_states.contains(ToggleStates::FILTER) {
+                playback_handler::change_filter_frequency_value(
+                    &state.music_filter,
+                    1.,
+                    Type::LowPass,
                 );
+                Type::LowPass
+            } else {
+                playback_handler::change_filter_frequency_value(
+                    &state.music_filter,
+                    0.,
+                    Type::AllPass,
+                );
+                Type::AllPass
+            };
+
+            playback_handler::change_filter_frequency_value(&state.music_filter, 1., filter_type);
+        }
+    }
+
+    fn handle_soft_key(key: SoftKey, state: &MusicState, midi_out: &mut ChannelOutput) {
+        match key {
+            SoftKey::Mute => {
+                if let Ok(mut data) = state.data.lock() {
+                    data.button_states.toggle_button(
+                        ToggleStates::from(key),
+                        midi_out,
+                        key,
+                        LedColor::Green,
+                    );
+                    match state.audio_sinks.lock() {
+                        Ok(audio_sinks) => {
+                            if data.button_states.contains(ToggleStates::MUTE) {
+                                data.knob_values
+                                    .insert(1u8, audio_sinks.music_queue.volume());
+                                playback_handler::change_volume(&audio_sinks.music_queue, 0.);
+                            } else {
+                                playback_handler::change_volume(
+                                    &audio_sinks.music_queue,
+                                    *data.knob_values.get(&1u8).unwrap_or(&0f32),
+                                );
+                            }
+                        }
+                        _ => {
+                            warn!("Failed to get audio sink lock, cannot mute song");
+                        }
+                    }
+                } else {
+                    warn!("Failed to get data lock, cannot handle mute press");
+                }
             }
             _ => {
-                warn!("Could not get audio sinks lock");
-            }
-        },
-        6 => playback_handler::change_filter_frequency_value(
-            &state.sound_filter,
-            delta,
-            Type::LowPass,
-        ),
-        7 => playback_handler::change_filter_frequency_value(
-            &state.sound_filter,
-            delta,
-            Type::HighPass,
-        ),
-        8 => playback_handler::change_filter_frequency_value(
-            &state.sound_filter,
-            delta,
-            Type::SinglePoleLowPassApprox,
-        ),
-        _ => {}
-    }
-    if !state.data.button_states.contains(ToggleStates::MUTE) {
-        state.data.knob_values.entry(index).and_modify(|v| {
-            *v += delta * KNOB_INCREMENT;
-            *v = v.clamp(0.0, 1.0);
-        });
-    }
-}
-
-fn handle_resume_pause(data: &mut MusicState, midi_out: &mut ChannelOutput) {
-    data.data.button_states.toggle_button(
-        ToggleStates::FILTER,
-        midi_out,
-        PadsAndKnobsInputGroup::ResumePause,
-        LedColor::Green,
-    );
-
-    let filter_type = if data.data.button_states.contains(ToggleStates::FILTER) {
-        playback_handler::change_filter_frequency_value(&data.music_filter, 1., Type::LowPass);
-        Type::LowPass
-    } else {
-        playback_handler::change_filter_frequency_value(&data.music_filter, 0., Type::AllPass);
-        Type::AllPass
-    };
-
-    playback_handler::change_filter_frequency_value(&data.music_filter, 1., filter_type);
-}
-
-fn handle_soft_key(key: SoftKey, state: &mut MusicState, midi_out: &mut ChannelOutput) {
-    match key {
-        SoftKey::ClipStop => state.data.button_states.toggle_button(
-            ToggleStates::CLIP_STOP,
-            midi_out,
-            key,
-            LedColor::Green,
-        ),
-        SoftKey::Solo => {
-            state.data.button_states.toggle_button(
-                ToggleStates::SOLO,
-                midi_out,
-                key,
-                LedColor::Green,
-            );
-        }
-        SoftKey::Mute => {
-            state.data.button_states.toggle_button(
-                ToggleStates::MUTE,
-                midi_out,
-                key,
-                LedColor::Green,
-            );
-            match state.audio_sinks.lock() {
-                Ok(audio_sinks) => {
-                    if state.data.button_states.contains(ToggleStates::MUTE) {
-                        state
-                            .data
-                            .knob_values
-                            .insert(1u8, audio_sinks.music_queue.volume());
-                        playback_handler::change_volume(&audio_sinks.music_queue, 0.);
-                    } else {
-                        playback_handler::change_volume(
-                            &audio_sinks.music_queue,
-                            *state.data.knob_values.get(&1u8).unwrap_or(&0f32),
-                        );
-                    }
-                }
-                _ => {
-                    warn!("Failed to get audio sink lock, cannot mute song");
+                if let Ok(mut data) = state.data.lock() {
+                    data.button_states.toggle_button(
+                        ToggleStates::from(key),
+                        midi_out,
+                        key,
+                        LedColor::Green,
+                    );
+                } else {
+                    warn!("Failed to get data lock, cannot handle soft key press");
                 }
             }
         }
-        SoftKey::RecArm => {
-            state.data.button_states.toggle_button(
-                ToggleStates::REC_ARM,
-                midi_out,
-                key,
-                LedColor::Green,
-            );
-        }
-        SoftKey::Select => {
-            state.data.button_states.toggle_button(
-                ToggleStates::SELECT,
+    }
+
+    fn handle_knob_ctrl(key: KnobCtrlKey, state: &MusicState, midi_out: &mut ChannelOutput) {
+        if let Ok(mut data) = state.data.lock() {
+            data.button_states.toggle_button(
+                ToggleStates::from(key),
                 midi_out,
                 key,
                 LedColor::Green,
@@ -229,142 +345,21 @@ fn handle_soft_key(key: SoftKey, state: &mut MusicState, midi_out: &mut ChannelO
     }
 }
 
-fn handle_knob_ctrl(key: KnobCtrlKey, data: &mut MusicState, midi_out: &mut ChannelOutput) {
-    match key {
-        KnobCtrlKey::Volume => {
-            data.data.button_states.toggle_button(
-                ToggleStates::VOLUME,
-                midi_out,
-                key,
-                LedColor::Green,
-            );
-        }
-        KnobCtrlKey::Pan => {
-            data.data.button_states.toggle_button(
-                ToggleStates::PAN,
-                midi_out,
-                key,
-                LedColor::Green,
-            );
-        }
-        KnobCtrlKey::Send => {
-            data.data.button_states.toggle_button(
-                ToggleStates::SEND,
-                midi_out,
-                key,
-                LedColor::Green,
-            );
-        }
-        KnobCtrlKey::Device => {
-            data.data.button_states.toggle_button(
-                ToggleStates::DEVICE,
-                midi_out,
-                key,
-                LedColor::Green,
-            );
-        }
-    }
-}
-
-pub fn pad_listener_logic(
-    midi_out: &mut ChannelOutput,
-    stamp: u64,
-    msg: &MidiInputData<PadsAndKnobsInputGroup>,
-    state: &mut MusicState,
+fn adjust_queue_volume(
+    state: &MusicState,
+    queue_selector: impl FnOnce(&AudioSinks) -> &Sink,
+    delta: f32,
 ) {
-    debug!("{stamp}: {msg:?}");
-    if msg.value > 0 {
-        match msg.input_group {
-            PadsAndKnobsInputGroup::Pads(ref pad) => handle_pad(*pad, state, midi_out),
-            PadsAndKnobsInputGroup::Knob(index) => handle_knob(index, msg.value, state),
-            PadsAndKnobsInputGroup::ResumePause => handle_resume_pause(state, midi_out),
-            PadsAndKnobsInputGroup::SoftKeys(ref key) => handle_soft_key(*key, state, midi_out),
-            PadsAndKnobsInputGroup::KnobCtrl(ref key) => handle_knob_ctrl(*key, state, midi_out),
-            PadsAndKnobsInputGroup::StopAllClips => state.data.button_states.toggle_button(
-                ToggleStates::STOP_ALL,
-                midi_out,
-                PadsAndKnobsInputGroup::StopAllClips,
-                LedColor::Green,
-            ),
-            PadsAndKnobsInputGroup::Shift => state.data.button_states.toggle_button(
-                ToggleStates::SHIFT,
-                midi_out,
-                PadsAndKnobsInputGroup::Shift,
-                LedColor::Green,
-            ),
-            PadsAndKnobsInputGroup::Start => state.data.button_states.toggle_button(
-                ToggleStates::START,
-                midi_out,
-                PadsAndKnobsInputGroup::Start,
-                LedColor::Green,
-            ),
-            PadsAndKnobsInputGroup::Left => {
-                change_button_status(
-                    midi_out,
-                    true,
-                    PadsAndKnobsInputGroup::Left,
-                    LedColor::Green,
-                );
-            }
-            PadsAndKnobsInputGroup::Right => {
-                change_button_status(
-                    midi_out,
-                    true,
-                    PadsAndKnobsInputGroup::Right,
-                    LedColor::Green,
-                );
-                match state.audio_sinks.lock() {
-                    Ok(audio_sinks) => audio_sinks.music_queue.skip_one(),
-                    Err(_) => {
-                        warn!("Failed to get audio sink lock, cannot skip music");
-                    }
-                }
-            }
-            PadsAndKnobsInputGroup::Up => {
-                change_button_status(midi_out, true, PadsAndKnobsInputGroup::Up, LedColor::Green);
-            }
-            PadsAndKnobsInputGroup::Down => {
-                change_button_status(
-                    midi_out,
-                    true,
-                    PadsAndKnobsInputGroup::Down,
-                    LedColor::Green,
-                );
-            }
+    match state.audio_sinks.lock() {
+        Ok(audio_sinks) => {
+            playback_handler::increase_volume(queue_selector(&audio_sinks), delta * KNOB_INCREMENT);
         }
-    } else {
-        match msg.input_group {
-            PadsAndKnobsInputGroup::Left => {
-                change_button_status(
-                    midi_out,
-                    false,
-                    PadsAndKnobsInputGroup::Left,
-                    LedColor::Green,
-                );
-            }
-            PadsAndKnobsInputGroup::Right => {
-                change_button_status(
-                    midi_out,
-                    false,
-                    PadsAndKnobsInputGroup::Right,
-                    LedColor::Green,
-                );
-            }
-            PadsAndKnobsInputGroup::Up => {
-                change_button_status(midi_out, false, PadsAndKnobsInputGroup::Up, LedColor::Green);
-            }
-            PadsAndKnobsInputGroup::Down => {
-                change_button_status(
-                    midi_out,
-                    false,
-                    PadsAndKnobsInputGroup::Down,
-                    LedColor::Green,
-                );
-            }
-            _ => {}
-        }
+        Err(_) => warn!("Failed to get audio sink lock, could not change volume"),
     }
-    update_gui(&state.tx_data, state.data.clone());
+}
+
+fn adjust_filter(filter: &Arc<Mutex<FilterData>>, delta: f32, filter_type: Type<f32>) {
+    playback_handler::change_filter_frequency_value(filter, delta, filter_type);
 }
 
 fn change_button_status<T>(

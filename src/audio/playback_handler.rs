@@ -1,8 +1,9 @@
 use crate::FilterData;
 use crate::audio::audio_filter::FilteredSource;
+use crate::states::playlist_data::Track;
 use biquad::{Coefficients, DirectForm1, Q_BUTTERWORTH_F32, ToHertz, Type};
 use log::warn;
-use rodio::Sink;
+use rodio::{Sink, Source};
 use std::error::Error;
 use std::sync::{Arc, Mutex};
 
@@ -52,24 +53,34 @@ pub fn increase_volume(sink: &Sink, value: f32) -> f32 {
     change_volume(sink, sink.volume() + value)
 }
 
-pub fn add_track_to_queue(sink: &Sink, file_path: &str, play: bool) -> Result<(), Box<dyn Error>> {
+pub fn add_track_to_queue(
+    sink: &Sink,
+    file_path: &str,
+    play: bool,
+) -> Result<Track, Box<dyn Error>> {
     let file = std::fs::File::open(file_path)?;
-    sink.append(rodio::Decoder::try_from(file)?);
+    let source = rodio::Decoder::try_from(file)?;
+    let track_length = source.total_duration();
+    sink.append(source);
     if play {
         sink.play();
     }
-    Ok(())
+    Ok(Track::builder()
+        .track_length(track_length)
+        .file_path(file_path)
+        .build())
 }
 
 pub fn play_track(
     sink: &Sink,
     file_path: &str,
     filter: Option<&Arc<Mutex<FilterData>>>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<Track, Box<dyn Error>> {
     sink.stop();
     sink.clear();
     let file = std::fs::File::open(file_path)?;
     let source = rodio::Decoder::try_from(file)?;
+    let track_length = source.total_duration();
     if let Some(filter) = filter {
         match filter.lock() {
             Ok(f) => sink.append(FilteredSource {
@@ -82,6 +93,16 @@ pub fn play_track(
         sink.append(source);
     }
     sink.play();
+    Ok(Track::builder()
+        .track_length(track_length)
+        .file_path(file_path)
+        .build())
+}
 
-    Ok(())
+pub fn get_n_of_remaining_tracks(sink: &Sink) -> u64 {
+    sink.len() as u64
+}
+
+pub fn get_current_track_elapsed_time(sink: &Sink) -> u64 {
+    sink.get_pos().as_secs()
 }

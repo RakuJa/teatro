@@ -1,4 +1,4 @@
-use crate::gui::handler::AkaiVisualizer;
+use crate::gui::ui::AkaiVisualizer;
 use std::sync::{Arc, Mutex};
 
 /// Wrapper used to share gui access
