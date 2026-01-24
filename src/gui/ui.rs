@@ -51,10 +51,6 @@ pub struct AkaiVisualizer {
     pub(crate) gui_data: Arc<Mutex<GuiData>>,
     pub(crate) info_panel_data: InfoPanelData,
     pub(crate) current_tab: CurrentTab,
-    #[cfg(feature = "bybe")]
-    pub(crate) webview: Option<Arc<Mutex<wry::WebView>>>,
-    #[cfg(not(feature = "bybe"))]
-    pub(crate) webview: Option<()>,
     pub(crate) webview_error: Option<String>,
 }
 
@@ -92,7 +88,6 @@ impl AkaiVisualizer {
                 editing_index: None,
             },
             current_tab: CurrentTab::Visualizer,
-            webview: None,
             webview_error: None,
         }
     }

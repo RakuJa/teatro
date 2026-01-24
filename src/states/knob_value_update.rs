@@ -34,9 +34,9 @@ impl From<KnobValueUpdate> for i8 {
 impl From<u8> for KnobValueUpdate {
     fn from(value: u8) -> Self {
         if value > 63 {
-            KnobValueUpdate::Decrement
+            Self::Decrement
         } else {
-            KnobValueUpdate::Increment
+            Self::Increment
         }
     }
 }
@@ -44,9 +44,9 @@ impl From<u8> for KnobValueUpdate {
 impl From<i128> for KnobValueUpdate {
     fn from(value: i128) -> Self {
         if value.is_positive() {
-            KnobValueUpdate::Increment
+            Self::Increment
         } else {
-            KnobValueUpdate::Decrement
+            Self::Decrement
         }
     }
 }
@@ -54,9 +54,9 @@ impl From<i128> for KnobValueUpdate {
 impl From<i64> for KnobValueUpdate {
     fn from(value: i64) -> Self {
         if value.is_positive() {
-            KnobValueUpdate::Increment
+            Self::Increment
         } else {
-            KnobValueUpdate::Decrement
+            Self::Decrement
         }
     }
 }
@@ -64,9 +64,9 @@ impl From<i64> for KnobValueUpdate {
 impl From<i32> for KnobValueUpdate {
     fn from(value: i32) -> Self {
         if value.is_positive() {
-            KnobValueUpdate::Increment
+            Self::Increment
         } else {
-            KnobValueUpdate::Decrement
+            Self::Decrement
         }
     }
 }
@@ -74,9 +74,9 @@ impl From<i32> for KnobValueUpdate {
 impl From<i16> for KnobValueUpdate {
     fn from(value: i16) -> Self {
         if value.is_positive() {
-            KnobValueUpdate::Increment
+            Self::Increment
         } else {
-            KnobValueUpdate::Decrement
+            Self::Decrement
         }
     }
 }
@@ -84,9 +84,9 @@ impl From<i16> for KnobValueUpdate {
 impl From<i8> for KnobValueUpdate {
     fn from(value: i8) -> Self {
         if value.is_positive() {
-            KnobValueUpdate::Increment
+            Self::Increment
         } else {
-            KnobValueUpdate::Decrement
+            Self::Decrement
         }
     }
 }
@@ -94,9 +94,9 @@ impl From<i8> for KnobValueUpdate {
 impl From<usize> for KnobValueUpdate {
     fn from(value: usize) -> Self {
         if value > 63 {
-            KnobValueUpdate::Increment
+            Self::Increment
         } else {
-            KnobValueUpdate::Decrement
+            Self::Decrement
         }
     }
 }

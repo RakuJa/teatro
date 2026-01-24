@@ -1,14 +1,18 @@
-use std::env;
-use std::rc::Rc;
-use std::sync::{Arc, Mutex};
-use flume::{Receiver, Sender};
 use crate::comms::command::Command;
 use crate::gui::gui_wrapper::GuiWrapper;
 use crate::gui::sync_handler::sync_gui_with_data_received_from_backend;
 use crate::gui::ui::{AkaiVisualizer, GuiData};
 use crate::states::visualizer::AkaiData;
+use flume::{Receiver, Sender};
+use std::env;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
-pub fn gui_initializer(backend_data: AkaiData, tx_command: Sender<Command>, rx_data: Receiver<AkaiData>) -> eframe::Result {
+pub fn gui_initializer(
+    backend_data: AkaiData,
+    tx_command: Sender<Command>,
+    rx_data: Receiver<AkaiData>,
+) -> eframe::Result {
     let font_folder = env::var("FONT_FOLDER").unwrap_or_else(|_| "ui/fonts".to_string());
 
     let options = eframe::NativeOptions {

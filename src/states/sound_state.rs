@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 pub struct SoundState {
     pub data: Arc<Mutex<AkaiData>>,
     pub audio_sinks: Arc<Mutex<AudioSinks>>,
-    pub sound_filter: Arc<Mutex<FilterData>>,
+    pub ambience_filter: Arc<Mutex<FilterData>>,
+    pub sound_effect_filter: Arc<Mutex<FilterData>>,
     pub tx_data: Sender<AkaiData>,
 }

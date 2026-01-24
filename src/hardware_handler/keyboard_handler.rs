@@ -1,9 +1,9 @@
 use crate::hardware_handler::hw_handler::MidiHandler;
 use crate::os_explorer::explorer::find_file_with_prefix;
 use crate::states::audio_sinks::AudioSinks;
-use crate::states::filter_data::FilterData;
 use crate::states::sound_state::SoundState;
 use crate::states::visualizer::AkaiData;
+use anyhow::bail;
 use flume::Sender;
 use log::{debug, warn};
 use ramidier::enums::input_group::KeyboardInputGroup;
@@ -13,6 +13,47 @@ use std::sync::{Arc, Mutex};
 
 const fn is_ambience_key(k: u8) -> bool {
     matches!(k, 2 | 4 | 7 | 9 | 11 | 14 | 16 | 19 | 21 | 23)
+}
+
+pub enum WhiteKey {
+    Key(u8),
+}
+
+const fn map_key_to_black_key_index(key: u8) -> u8 {
+    match key {
+        2 => 1,
+        4 => 2,
+        7 => 3,
+        9 => 4,
+        11 => 5,
+        14 => 6,
+        16 => 7,
+        19 => 8,
+        21 => 9,
+        23 => 10,
+        _ => 0,
+    }
+}
+
+const fn map_key_to_white_key_index(key: u8) -> u8 {
+    match key {
+        1 => 1,
+        3 => 2,
+        5 => 3,
+        6 => 4,
+        8 => 5,
+        10 => 6,
+        12 => 7,
+        13 => 8,
+        15 => 9,
+        17 => 10,
+        18 => 11,
+        20 => 12,
+        22 => 13,
+        24 => 14,
+        25 => 15,
+        _ => 0,
+    }
 }
 
 #[derive(Debug)]
@@ -39,7 +80,7 @@ impl MidiHandler for KeyboardHandler {
     ) {
         debug!("{stamp}: {msg:?}");
         if msg.value != 0 {
-            Self::handle_input(msg.input_group, state)
+            Self::handle_input(msg.input_group, state);
         }
     }
 }
@@ -50,13 +91,7 @@ impl KeyboardHandler {
             KeyboardInputGroup::Key(k) => {
                 if let Ok(data) = state.data.lock() {
                     if let Ok(audio_sinks) = state.audio_sinks.lock() {
-                        if let Err(e) = Self::play_sound_file(
-                            k,
-                            &data.sound_folder,
-                            &audio_sinks,
-                            &state.sound_filter,
-                            data.get_sound_effect_volume(),
-                        ) {
+                        if let Err(e) = Self::play_sound_file(k, &data, &audio_sinks, state) {
                             warn!("Error while trying to play sound file: {e}");
                         }
                     }
@@ -67,24 +102,45 @@ impl KeyboardHandler {
 
     fn play_sound_file(
         key: u8,
-        sound_folder: &str,
+        data: &AkaiData,
         audio_sinks: &AudioSinks,
-        sound_filter: &Arc<Mutex<FilterData>>,
-        volume: Option<f32>,
-    ) -> Result<(), String> {
-        let prefix = format!("{key:02}_");
-        let file_path = find_file_with_prefix(sound_folder, &prefix)
-            .ok_or_else(|| format!("No audio for key {key} in {sound_folder}"))?;
-
-        let file_str = file_path.to_str().ok_or("Invalid UTF-8 in file path")?;
-
-        let queue = if is_ambience_key(key) {
-            &audio_sinks.ambience_queue
+        state: &SoundState,
+    ) -> anyhow::Result<()> {
+        let w_k = map_key_to_white_key_index(key);
+        let (index, folder, filter, volume) = if w_k > 0 {
+            (
+                w_k,
+                data.sound_effect_folder.clone(),
+                state.sound_effect_filter.clone(),
+                data.get_sound_effect_volume(),
+            )
         } else {
-            &audio_sinks.sound_effect_queue
+            let b_k = map_key_to_black_key_index(key);
+            if b_k == 0 {
+                bail!("Not a valid keyboard key {key}")
+            }
+            (
+                b_k,
+                data.ambience_folder.clone(),
+                state.ambience_filter.clone(),
+                data.get_ambience_volume(),
+            )
         };
-
-        Self::play_song(&[file_str.to_string()], queue, sound_filter, volume);
-        Ok(())
+        let prefix = format!("{index:02}_");
+        if let Some(file_path) = find_file_with_prefix(&folder, &prefix) {
+            if let Some(file_str) = file_path.to_str() {
+                let queue = if is_ambience_key(key) {
+                    &audio_sinks.ambience_queue
+                } else {
+                    &audio_sinks.sound_effect_queue
+                };
+                Self::play_song(&[file_str.to_string()], queue, &filter, volume);
+                Ok(())
+            } else {
+                bail!("Invalid UTF-8 in file path")
+            }
+        } else {
+            bail!("No audio for key {key} in {folder}");
+        }
     }
 }

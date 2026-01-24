@@ -77,7 +77,7 @@ pub fn handle_gui_command_and_relay_them_to_backend(
                                 1,
                                 music_state,
                             );
-                            refresh_backend(tx_command)
+                            refresh_backend(tx_command);
                         } else {
                             warn!("Invalid padkey, will not update data");
                         }
@@ -87,7 +87,7 @@ pub fn handle_gui_command_and_relay_them_to_backend(
                 Command::BlackKeyPressed { key, device }
                 | Command::WhiteKeyPressed { key, device } => match device {
                     Device::ToBackend => {
-                        KeyboardHandler::handle_input(KeyboardInputGroup::Key(key), &sound_state)
+                        KeyboardHandler::handle_input(KeyboardInputGroup::Key(key), sound_state);
                     }
                     Device::ToGui => {}
                 },
@@ -103,7 +103,7 @@ pub fn handle_gui_command_and_relay_them_to_backend(
                             value.into(),
                             music_state,
                         );
-                        refresh_backend(tx_command)
+                        refresh_backend(tx_command);
                     }
                     Device::ToGui => {}
                 },

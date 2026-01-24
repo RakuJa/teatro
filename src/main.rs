@@ -7,6 +7,7 @@ mod os_explorer;
 mod states;
 
 use crate::comms::command::Command;
+use crate::gui::initializer::gui_initializer;
 use crate::hardware_handler::pad_handler::PadHandler;
 use crate::states::audio_sinks::AudioSinks;
 use crate::states::filter_data::FilterData;
@@ -15,13 +16,20 @@ use crate::states::sound_state::SoundState;
 use crate::states::visualizer::AkaiData;
 use biquad::{Coefficients, DirectForm1, Q_BUTTERWORTH_F32, ToHertz, Type};
 use dotenv::dotenv;
-use flume::{Sender};
+use flume::Sender;
 use ramidier::io::input::InputChannel;
 use ramidier::io::output::ChannelOutput;
 use rodio::Sink;
 use std::env;
 use std::sync::{Arc, Mutex};
-use crate::gui::initializer::gui_initializer;
+
+fn get_base_filter_data(coeffs: Coefficients<f32>) -> FilterData {
+    FilterData {
+        previous_filter_percentage: 1.,
+        filter_type: Type::AllPass,
+        filter: Arc::new(Mutex::new(DirectForm1::<f32>::new(coeffs))),
+    }
+}
 
 fn prepare_audio_states(
     music_queue: Sink,
@@ -44,29 +52,24 @@ fn prepare_audio_states(
         Q_BUTTERWORTH_F32,
     )
     .expect("Could not create coeffs to initialize filters");
-    let music_filter_data = Arc::new(Mutex::new(FilterData {
-        previous_filter_percentage: 1.,
-        filter_type: Type::AllPass,
-        filter: Arc::new(Mutex::new(DirectForm1::<f32>::new(coeffs))),
-    }));
-    let sound_filter_data = Arc::new(Mutex::new(FilterData {
-        previous_filter_percentage: 1.,
-        filter_type: Type::AllPass,
-        filter: Arc::new(Mutex::new(DirectForm1::<f32>::new(coeffs))),
-    }));
+    let music_filter_data = Arc::new(Mutex::new(get_base_filter_data(coeffs)));
+    let ambience_filter = Arc::new(Mutex::new(get_base_filter_data(coeffs)));
+    let sound_effect_filter = Arc::new(Mutex::new(get_base_filter_data(coeffs)));
 
     (
         MusicState {
             audio_sinks: audio_sinks.clone(),
             music_filter: music_filter_data,
-            sound_filter: sound_filter_data.clone(),
+            ambience_filter: ambience_filter.clone(),
             tx_data: tx_data.clone(),
             data: data.clone(),
+            sound_effect_filter: sound_effect_filter.clone(),
         },
         SoundState {
             data,
             audio_sinks,
-            sound_filter: sound_filter_data,
+            ambience_filter,
+            sound_effect_filter,
             tx_data: tx_data.clone(),
         },
     )
@@ -88,14 +91,16 @@ fn main() {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
     let music_folder = env::var("MUSIC_FOLDER").unwrap_or_else(|_| "music".to_string());
-    let sound_folder = env::var("SOUND_FOLDER").unwrap_or_else(|_| "sound".to_string());
+    let ambience_folder = env::var("AMBIENCE_FOLDER").unwrap_or_else(|_| "ambience".to_string());
+    let sound_effect_folder = env::var("SOUND_FOLDER").unwrap_or_else(|_| "sound".to_string());
 
     let pad_labels =
         PadHandler::get_pad_albums_list(&music_folder).expect("Music folder should be readable");
 
     let backend_data = AkaiData::builder()
         .music_folder(&music_folder)
-        .sound_folder(&sound_folder)
+        .ambience_folder(&ambience_folder)
+        .sound_effect_folder(&sound_effect_folder)
         .pad_labels(pad_labels)
         .build();
 
@@ -177,6 +182,7 @@ fn main() {
                 }
             })
             .expect("failed to watch folder!");
-        gui_initializer(backend_data, tx_command, rx_data).expect("Application did not complete run correctly");
+        gui_initializer(backend_data, tx_command, rx_data)
+            .expect("Application did not complete run correctly");
     }
 }

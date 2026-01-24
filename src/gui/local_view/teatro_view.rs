@@ -785,7 +785,7 @@ impl AkaiVisualizer {
         }
     }
 
-    fn draw_audio_player(&self, ui: &mut egui::Ui, rect: Rect, scale: f32) {
+    fn draw_audio_player(&self, ui: &egui::Ui, rect: Rect, scale: f32) {
         let player_height = 120.0 * scale;
         let margin = 15.0 * scale;
 
@@ -825,7 +825,7 @@ impl AkaiVisualizer {
             elapsed_ms,
             total_ms,
             is_shuffled,
-            is_looped,
+            _is_looped,
             is_muted,
             is_paused,
             is_solo,
@@ -958,7 +958,7 @@ impl AkaiVisualizer {
 
         let solo_rect = Rect::from_min_size(
             Pos2::new(
-                buttons_start_x + (button_size.x + button_spacing) * 2.0,
+                (button_size.x + button_spacing).mul_add(2.0, buttons_start_x),
                 buttons_y,
             ),
             button_size,
@@ -997,7 +997,7 @@ impl AkaiVisualizer {
 
         let stop_all_rect = Rect::from_min_size(
             Pos2::new(
-                buttons_start_x + (button_size.x + button_spacing) * 3.0,
+                (button_size.x + button_spacing).mul_add(3.0, buttons_start_x),
                 buttons_y,
             ),
             button_size,
@@ -1045,7 +1045,7 @@ impl AkaiVisualizer {
             .unwrap_or("No Track Playing")
             .to_string();
 
-        let title_y = buttons_y + button_size.y + 8.0 * scale;
+        let title_y = 8.0f32.mul_add(scale, buttons_y + button_size.y);
 
         ui.painter().text(
             Pos2::new(content_padding + player_rect.min.x + scale, title_y + scale),
@@ -1088,12 +1088,13 @@ impl AkaiVisualizer {
 
         if progress > 0.0 {
             let wave_height = 20.0 * scale;
-            let wave_y = player_rect.max.y
-                - content_padding
-                - 12.0 * scale
-                - 8.0 * scale
-                - wave_height
-                - 32.0 * scale;
+            let wave_y = 32.0f32.mul_add(
+                -scale,
+                8.0f32.mul_add(
+                    -scale,
+                    12.0f32.mul_add(-scale, player_rect.max.y - content_padding),
+                ) - wave_height,
+            );
             let num_bars = 50;
             let bar_width =
                 ((player_rect.width() - content_padding * 2.0) / num_bars as f32) * 0.75;
@@ -1226,13 +1227,13 @@ impl AkaiVisualizer {
         }
 
         let bottom_button_size = Vec2::new(32.0 * scale, 32.0 * scale);
-        let bottom_buttons_y = bar_y - bottom_button_size.y * 0.5 + bar_height * 0.5;
+        let bottom_buttons_y = bottom_button_size.y.mul_add(-0.5, bar_y) + bar_height * 0.5;
         let center_x = player_rect.center().x;
 
         let pause_rect = Rect::from_center_size(
             Pos2::new(
-                center_x - bottom_button_size.x * 0.5 - 4.0 * scale,
-                bottom_buttons_y + bottom_button_size.y * 0.5,
+                4.0f32.mul_add(-scale, bottom_button_size.x.mul_add(-0.5, center_x)),
+                bottom_button_size.y.mul_add(0.5, bottom_buttons_y),
             ),
             bottom_button_size,
         );
@@ -1268,8 +1269,8 @@ impl AkaiVisualizer {
 
         let skip_rect = Rect::from_center_size(
             Pos2::new(
-                center_x + bottom_button_size.x * 0.5 + 4.0 * scale,
-                bottom_buttons_y + bottom_button_size.y * 0.5,
+                4.0f32.mul_add(scale, bottom_button_size.x.mul_add(0.5, center_x)),
+                bottom_button_size.y.mul_add(0.5, bottom_buttons_y),
             ),
             bottom_button_size,
         );

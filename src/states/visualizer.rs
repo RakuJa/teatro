@@ -6,7 +6,8 @@ use std::collections::HashMap;
 #[derive(Clone, Debug)]
 pub struct AkaiData {
     pub music_folder: String,
-    pub sound_folder: String,
+    pub ambience_folder: String,
+    pub sound_effect_folder: String,
     pub pad_labels: Vec<String>,
     pub knob_values: HashMap<u8, f32>,
     pub button_states: ToggleStates,
@@ -19,7 +20,8 @@ impl AkaiData {
     #[builder]
     pub fn new(
         music_folder: &str,
-        sound_folder: &str,
+        ambience_folder: &str,
+        sound_effect_folder: &str,
         pad_labels: Option<Vec<String>>,
         knob_values: Option<HashMap<u8, f32>>,
         button_states: Option<ToggleStates>,
@@ -28,7 +30,8 @@ impl AkaiData {
     ) -> Self {
         Self {
             music_folder: music_folder.to_string(),
-            sound_folder: sound_folder.to_string(),
+            ambience_folder: ambience_folder.to_string(),
+            sound_effect_folder: sound_effect_folder.to_string(),
             pad_labels: pad_labels.unwrap_or_else(|| vec![String::new(); 40]),
             knob_values: knob_values.unwrap_or_else(|| {
                 HashMap::from([
@@ -38,7 +41,7 @@ impl AkaiData {
                     (4, 0.),
                     (5, 0.1),
                     (6, 0.),
-                    (7, 0.),
+                    (7, 0.1),
                     (8, 0.),
                 ])
             }),
@@ -53,7 +56,7 @@ impl AkaiData {
         self.pad_labels = new_data.pad_labels;
         self.button_states = new_data.button_states;
         self.music_folder = new_data.music_folder;
-        self.sound_folder = new_data.sound_folder;
+        self.ambience_folder = new_data.ambience_folder;
         self.current_playlist = new_data.current_playlist;
         self.last_pad_pressed = new_data.last_pad_pressed;
     }
@@ -62,7 +65,10 @@ impl AkaiData {
         self.knob_values.get(&1).copied()
     }
 
-    pub fn get_sound_effect_volume(&self) -> Option<f32> {
+    pub fn get_ambience_volume(&self) -> Option<f32> {
         self.knob_values.get(&5).copied()
+    }
+    pub fn get_sound_effect_volume(&self) -> Option<f32> {
+        self.knob_values.get(&7).copied()
     }
 }

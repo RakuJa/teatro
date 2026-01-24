@@ -54,7 +54,8 @@ impl MidiHandler for PadHandler {
             || stale_data.clone(),
             |playlist| AkaiData {
                 music_folder: stale_data.music_folder.clone(),
-                sound_folder: stale_data.sound_folder.clone(),
+                ambience_folder: stale_data.ambience_folder.clone(),
+                sound_effect_folder: stale_data.sound_effect_folder.clone(),
                 pad_labels: stale_data.pad_labels.clone(),
                 knob_values: stale_data.knob_values.clone(),
                 button_states: stale_data.button_states,
@@ -108,7 +109,8 @@ impl PadHandler {
     ) -> anyhow::Result<AkaiData> {
         let data = AkaiData {
             music_folder: stale_data.music_folder.clone(),
-            sound_folder: stale_data.sound_folder.clone(),
+            ambience_folder: stale_data.ambience_folder.clone(),
+            sound_effect_folder: stale_data.sound_effect_folder.clone(),
             pad_labels: Self::get_pad_albums_list(&stale_data.music_folder)?,
             knob_values: stale_data.knob_values.clone(),
             button_states: stale_data.button_states,
@@ -144,8 +146,8 @@ impl PadHandler {
             | PadsAndKnobsInputGroup::Right
             | PadsAndKnobsInputGroup::Up
             | PadsAndKnobsInputGroup::Down => {
-                if let Some(mut out) = midi_out {
-                    change_button_status(&mut out, false, input_group, LedColor::Green);
+                if let Some(out) = midi_out {
+                    change_button_status(out, false, input_group, LedColor::Green);
                 }
             }
             _ => {}
@@ -161,7 +163,7 @@ impl PadHandler {
         match input_group {
             PadsAndKnobsInputGroup::Pads(ref pad) => Self::handle_pad(*pad, state, midi_out),
             PadsAndKnobsInputGroup::Knob(index) => {
-                Self::handle_knob(index, KnobValueUpdate::from(value), state)
+                Self::handle_knob(index, KnobValueUpdate::from(value), state);
             }
             PadsAndKnobsInputGroup::ResumePause => Self::handle_resume_pause(state, midi_out),
             PadsAndKnobsInputGroup::SoftKeys(key) => Self::handle_soft_key(key, state, midi_out),
@@ -282,15 +284,9 @@ impl PadHandler {
                     adjust_filter(&state.music_filter, delta, filter_type);
                 }
                 5 => adjust_queue_volume(state, |s| &s.ambience_queue, delta),
-                6..=8 => {
-                    let filter_type = match index {
-                        6 => Type::LowPass,
-                        7 => Type::HighPass,
-                        8 => Type::SinglePoleLowPassApprox,
-                        _ => unreachable!(),
-                    };
-                    adjust_filter(&state.sound_filter, delta, filter_type);
-                }
+                6 => adjust_filter(&state.ambience_filter, delta, Type::LowPass),
+                7 => adjust_queue_volume(state, |s| &s.sound_effect_queue, delta),
+                8 => adjust_filter(&state.sound_effect_filter, delta, Type::HighPass),
                 _ => {}
             }
             if !data.button_states.contains(ToggleStates::MUTE) {
@@ -378,7 +374,7 @@ impl PadHandler {
                         if d.button_states.contains(ToggleStates::CLIP_STOP) {
                             playback_handler::pause_track(&audio_sinks.music_queue);
                         } else if !d.button_states.contains(ToggleStates::STOP_ALL) {
-                            playback_handler::resume_track(&audio_sinks.music_queue)
+                            playback_handler::resume_track(&audio_sinks.music_queue);
                         }
                     }
                 } else {
