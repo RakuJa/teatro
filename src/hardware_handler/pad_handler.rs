@@ -1,12 +1,13 @@
 use crate::MusicState;
 use crate::audio::playback_handler;
-use crate::hardware_handler::midi_handler::MidiHandler;
+use crate::hardware_handler::hw_handler::MidiHandler;
 use crate::os_explorer::explorer::{
     get_album_name_from_folder_in_path, map_to_indexed_vec, search_files_in_path,
 };
 use crate::states::audio_sinks::AudioSinks;
 use crate::states::button_states::ToggleStates;
 use crate::states::filter_data::FilterData;
+use crate::states::knob_value_update::KnobValueUpdate;
 use crate::states::visualizer::AkaiData;
 use biquad::Type;
 use flume::Sender;
@@ -28,12 +29,14 @@ impl ToggleStates {
     pub fn toggle_button<T: Into<u8> + Copy>(
         &mut self,
         button: Self,
-        midi_out: &mut ChannelOutput,
+        midi_out: Option<&mut ChannelOutput>,
         key: T,
         color: LedColor,
     ) {
         self.toggle(button);
-        change_button_status(midi_out, self.contains(button), key.into(), color);
+        if let Some(out) = midi_out {
+            change_button_status(out, self.contains(button), key.into(), color);
+        }
     }
 }
 
@@ -66,23 +69,17 @@ impl MidiHandler for PadHandler {
         x
     }
     fn listener(
-        midi_out: &mut ChannelOutput,
+        midi_out: Arc<Mutex<ChannelOutput>>,
         stamp: u64,
         msg: &MidiInputData<Self::Group>,
         state: &mut Self::State,
     ) {
         debug!("{stamp}: {msg:?}");
-        if msg.value > 0 {
-            Self::handle_button_press(midi_out, msg, state);
-        } else {
-            match msg.input_group {
-                PadsAndKnobsInputGroup::Left
-                | PadsAndKnobsInputGroup::Right
-                | PadsAndKnobsInputGroup::Up
-                | PadsAndKnobsInputGroup::Down => {
-                    change_button_status(midi_out, false, msg.input_group, LedColor::Green);
-                }
-                _ => {}
+        if let Ok(mut out) = midi_out.lock() {
+            if msg.value > 0 {
+                Self::handle_input_pressed(Some(&mut *out), msg.input_group, msg.value, state);
+            } else {
+                Self::handle_input_released(Some(&mut *out), msg.input_group, msg.value, state);
             }
         }
         if let Ok(mut data) = state.data.lock()
@@ -124,7 +121,7 @@ impl PadHandler {
 
     fn toggle_state_button(
         state: &MusicState,
-        midi_out: &mut ChannelOutput,
+        midi_out: Option<&mut ChannelOutput>,
         toggle_state: ToggleStates,
         input_group: PadsAndKnobsInputGroup,
     ) {
@@ -135,35 +132,83 @@ impl PadHandler {
             warn!("Could not lock mutex for toggle button: {toggle_state:?}");
         }
     }
-    fn handle_button_press(
-        midi_out: &mut ChannelOutput,
-        msg: &MidiInputData<PadsAndKnobsInputGroup>,
+
+    pub fn handle_input_released(
+        midi_out: Option<&mut ChannelOutput>,
+        input_group: PadsAndKnobsInputGroup,
+        _value: u8,
+        _state: &MusicState,
+    ) {
+        match input_group {
+            PadsAndKnobsInputGroup::Left
+            | PadsAndKnobsInputGroup::Right
+            | PadsAndKnobsInputGroup::Up
+            | PadsAndKnobsInputGroup::Down => {
+                if let Some(mut out) = midi_out {
+                    change_button_status(&mut out, false, input_group, LedColor::Green);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    pub fn handle_input_pressed(
+        midi_out: Option<&mut ChannelOutput>,
+        input_group: PadsAndKnobsInputGroup,
+        value: u8,
         state: &MusicState,
     ) {
-        match msg.input_group {
+        match input_group {
             PadsAndKnobsInputGroup::Pads(ref pad) => Self::handle_pad(*pad, state, midi_out),
-            PadsAndKnobsInputGroup::Knob(index) => Self::handle_knob(index, msg.value, state),
+            PadsAndKnobsInputGroup::Knob(index) => {
+                Self::handle_knob(index, KnobValueUpdate::from(value), state)
+            }
             PadsAndKnobsInputGroup::ResumePause => Self::handle_resume_pause(state, midi_out),
             PadsAndKnobsInputGroup::SoftKeys(key) => Self::handle_soft_key(key, state, midi_out),
             PadsAndKnobsInputGroup::KnobCtrl(key) => {
                 Self::handle_knob_ctrl(key, state, midi_out);
             }
             PadsAndKnobsInputGroup::StopAllClips => {
-                Self::toggle_state_button(state, midi_out, ToggleStates::STOP_ALL, msg.input_group);
+                Self::toggle_state_button(state, midi_out, ToggleStates::STOP_ALL, input_group);
+                match state.audio_sinks.lock() {
+                    Ok(audio_sinks) => {
+                        if let Ok(d) = state.data.lock() {
+                            if d.button_states.contains(ToggleStates::STOP_ALL) {
+                                playback_handler::pause_track(&audio_sinks.music_queue);
+                                playback_handler::pause_track(&audio_sinks.ambience_queue);
+                                playback_handler::pause_track(&audio_sinks.sound_effect_queue);
+                            } else {
+                                if !d.button_states.contains(ToggleStates::CLIP_STOP) {
+                                    playback_handler::resume_track(&audio_sinks.music_queue);
+                                }
+                                playback_handler::resume_track(&audio_sinks.ambience_queue);
+                                playback_handler::resume_track(&audio_sinks.sound_effect_queue);
+                            }
+                        }
+                    }
+
+                    _ => {
+                        warn!("Failed to get audio sink lock, cannot mute all songs");
+                    }
+                }
             }
             PadsAndKnobsInputGroup::Shift => {
-                Self::toggle_state_button(state, midi_out, ToggleStates::SHIFT, msg.input_group);
+                Self::toggle_state_button(state, midi_out, ToggleStates::SHIFT, input_group);
             }
             PadsAndKnobsInputGroup::Start => {
-                Self::toggle_state_button(state, midi_out, ToggleStates::START, msg.input_group);
+                Self::toggle_state_button(state, midi_out, ToggleStates::START, input_group);
             }
             PadsAndKnobsInputGroup::Left
             | PadsAndKnobsInputGroup::Up
             | PadsAndKnobsInputGroup::Down => {
-                change_button_status(midi_out, true, msg.input_group, LedColor::Green);
+                if let Some(out) = midi_out {
+                    change_button_status(out, true, input_group, LedColor::Green);
+                }
             }
             PadsAndKnobsInputGroup::Right => {
-                change_button_status(midi_out, true, msg.input_group, LedColor::Green);
+                if let Some(out) = midi_out {
+                    change_button_status(out, true, input_group, LedColor::Green);
+                }
                 if let Ok(audio_sinks) = state.audio_sinks.lock() {
                     audio_sinks.music_queue.skip_one();
                 } else {
@@ -173,15 +218,10 @@ impl PadHandler {
         }
     }
 
-    fn handle_pad(pad: PadKey, state: &MusicState, midi_out: &mut ChannelOutput) {
+    fn handle_pad(pad: PadKey, state: &MusicState, midi_out: Option<&mut ChannelOutput>) {
         let note = pad.get_index();
-
         if let Ok(mut data) = state.data.lock() {
-            // Turn off previous pad
-            if let Some(l_p) = data.last_pad_pressed {
-                let _ = midi_out.set_pad_led(LedMode::On10Percent, l_p, LedColor::Off);
-            }
-
+            let old_pad = data.last_pad_pressed;
             data.last_pad_pressed = Some(note);
             let prefix = format!("{note:02}_");
             if let Ok(res) = search_files_in_path(data.music_folder.as_str(), prefix.as_str()) {
@@ -192,7 +232,7 @@ impl PadHandler {
                     .filter_map(|x| x.to_str())
                     .map(ToString::to_string)
                     .collect::<Vec<String>>();
-                if data.button_states.contains(ToggleStates::SELECT) {
+                if data.button_states.contains(ToggleStates::SEND) {
                     fastrand::shuffle(files.as_mut_slice());
                 }
                 if let Ok(audio_sinks) = state.audio_sinks.lock() {
@@ -209,14 +249,20 @@ impl PadHandler {
                 warn!("No folder associated with the given button {note}");
             }
             let color: LedColor = (pad.get_index() + 1).try_into().unwrap_or(LedColor::Green);
-            let _ = midi_out.set_pad_led(LedMode::On100Percent, note, color);
+            if let Some(out) = midi_out {
+                // Turn off previous pad
+                if let Some(l_p) = old_pad {
+                    let _ = out.set_pad_led(LedMode::On10Percent, l_p, LedColor::Off);
+                }
+                let _ = out.set_pad_led(LedMode::On100Percent, note, color);
+            }
         } else {
             warn!("Failed to get a lock on data. Will not handle pad action");
         }
     }
 
-    fn handle_knob(index: u8, value: u8, state: &MusicState) {
-        let delta = if value > 63 { -1.0 } else { 1.0 };
+    fn handle_knob(index: u8, value: KnobValueUpdate, state: &MusicState) {
+        let delta = value.into();
         if let Ok(mut data) = state.data.lock() {
             match index {
                 1 => {
@@ -258,7 +304,7 @@ impl PadHandler {
         }
     }
 
-    fn handle_resume_pause(state: &MusicState, midi_out: &mut ChannelOutput) {
+    fn handle_resume_pause(state: &MusicState, midi_out: Option<&mut ChannelOutput>) {
         if let Ok(mut data) = state.data.lock() {
             data.button_states.toggle_button(
                 ToggleStates::FILTER,
@@ -287,7 +333,7 @@ impl PadHandler {
         }
     }
 
-    fn handle_soft_key(key: SoftKey, state: &MusicState, midi_out: &mut ChannelOutput) {
+    fn handle_soft_key(key: SoftKey, state: &MusicState, midi_out: Option<&mut ChannelOutput>) {
         match key {
             SoftKey::Mute => {
                 if let Ok(mut data) = state.data.lock() {
@@ -318,6 +364,46 @@ impl PadHandler {
                     warn!("Failed to get data lock, cannot handle mute press");
                 }
             }
+            SoftKey::ClipStop => {
+                if let Ok(mut data) = state.data.lock() {
+                    data.button_states.toggle_button(
+                        ToggleStates::from(key),
+                        midi_out,
+                        key,
+                        LedColor::Green,
+                    );
+                }
+                if let Ok(audio_sinks) = state.audio_sinks.lock() {
+                    if let Ok(d) = state.data.lock() {
+                        if d.button_states.contains(ToggleStates::CLIP_STOP) {
+                            playback_handler::pause_track(&audio_sinks.music_queue);
+                        } else if !d.button_states.contains(ToggleStates::STOP_ALL) {
+                            playback_handler::resume_track(&audio_sinks.music_queue)
+                        }
+                    }
+                } else {
+                    warn!("Failed to get audio sink lock, cannot mute song");
+                }
+            }
+            SoftKey::Solo => {
+                if let Ok(mut data) = state.data.lock() {
+                    data.button_states.toggle_button(
+                        ToggleStates::from(key),
+                        midi_out,
+                        key,
+                        LedColor::Green,
+                    );
+                }
+                match state.audio_sinks.lock() {
+                    Ok(audio_sinks) => {
+                        playback_handler::stop_track(&audio_sinks.sound_effect_queue);
+                        playback_handler::stop_track(&audio_sinks.ambience_queue);
+                    }
+                    _ => {
+                        warn!("Failed to get audio sink lock, cannot mute song");
+                    }
+                }
+            }
             _ => {
                 if let Ok(mut data) = state.data.lock() {
                     data.button_states.toggle_button(
@@ -333,7 +419,11 @@ impl PadHandler {
         }
     }
 
-    fn handle_knob_ctrl(key: KnobCtrlKey, state: &MusicState, midi_out: &mut ChannelOutput) {
+    fn handle_knob_ctrl(
+        key: KnobCtrlKey,
+        state: &MusicState,
+        midi_out: Option<&mut ChannelOutput>,
+    ) {
         if let Ok(mut data) = state.data.lock() {
             data.button_states.toggle_button(
                 ToggleStates::from(key),

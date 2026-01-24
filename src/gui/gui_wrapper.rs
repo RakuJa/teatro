@@ -1,9 +1,10 @@
 use crate::gui::ui::AkaiVisualizer;
-use std::sync::{Arc, Mutex};
+use std::rc::Rc;
+use std::sync::Mutex;
 
 /// Wrapper used to share gui access
 pub struct GuiWrapper {
-    pub state: Arc<Mutex<AkaiVisualizer>>,
+    pub state: Rc<Mutex<AkaiVisualizer>>,
 }
 
 impl eframe::App for GuiWrapper {

@@ -1,4 +1,4 @@
-use crate::hardware_handler::midi_handler::MidiHandler;
+use crate::hardware_handler::hw_handler::MidiHandler;
 use crate::os_explorer::explorer::find_file_with_prefix;
 use crate::states::audio_sinks::AudioSinks;
 use crate::states::filter_data::FilterData;
@@ -24,46 +24,47 @@ impl MidiHandler for KeyboardHandler {
     type State = SoundState;
 
     fn refresh(
-        _stale_data: &AkaiData,
+        stale_data: &AkaiData,
         _tx_data: &Sender<AkaiData>,
         _audio_sinks: &AudioSinks,
     ) -> AkaiData {
-        _stale_data.clone()
+        stale_data.clone()
     }
 
     fn listener(
-        _midi_out: &mut ChannelOutput,
+        _midi_out: Arc<Mutex<ChannelOutput>>,
         stamp: u64,
         msg: &MidiInputData<Self::Group>,
         state: &mut Self::State,
     ) {
         debug!("{stamp}: {msg:?}");
-        if msg.value == 0 {
-            return;
+        if msg.value != 0 {
+            Self::handle_input(msg.input_group, state)
         }
-        match msg.input_group {
+    }
+}
+
+impl KeyboardHandler {
+    pub fn handle_input(input_group: KeyboardInputGroup, state: &SoundState) {
+        match input_group {
             KeyboardInputGroup::Key(k) => {
-                if let Ok(folder) = state.data.lock().map(|x| x.sound_folder.clone()) {
-                    if let Ok(volume) = state.data.lock().map(|x| x.get_sound_effect_volume()) {
-                        if let Ok(audio_sinks) = state.audio_sinks.lock() {
-                            if let Err(e) = Self::play_sound_file(
-                                k,
-                                &folder,
-                                &audio_sinks,
-                                &state.sound_filter,
-                                volume,
-                            ) {
-                                warn!("Error while trying to play sound file: {e}");
-                            }
+                if let Ok(data) = state.data.lock() {
+                    if let Ok(audio_sinks) = state.audio_sinks.lock() {
+                        if let Err(e) = Self::play_sound_file(
+                            k,
+                            &data.sound_folder,
+                            &audio_sinks,
+                            &state.sound_filter,
+                            data.get_sound_effect_volume(),
+                        ) {
+                            warn!("Error while trying to play sound file: {e}");
                         }
                     }
                 }
             }
         }
     }
-}
 
-impl KeyboardHandler {
     fn play_sound_file(
         key: u8,
         sound_folder: &str,

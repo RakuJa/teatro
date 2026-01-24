@@ -71,6 +71,18 @@ pub fn add_track_to_queue(
         .build())
 }
 
+pub fn stop_track(sink: &Sink) {
+    sink.stop();
+}
+
+pub fn pause_track(sink: &Sink) {
+    sink.pause();
+}
+
+pub fn resume_track(sink: &Sink) {
+    sink.play();
+}
+
 pub fn play_track(
     sink: &Sink,
     file_path: &str,
@@ -78,6 +90,7 @@ pub fn play_track(
 ) -> Result<Track, Box<dyn Error>> {
     sink.stop();
     sink.clear();
+
     let file = std::fs::File::open(file_path)?;
     let source = rodio::Decoder::try_from(file)?;
     let track_length = source.total_duration();

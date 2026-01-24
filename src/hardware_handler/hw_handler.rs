@@ -78,7 +78,7 @@ pub trait MidiHandler {
     }
 
     fn listener(
-        midi_out: &mut ChannelOutput,
+        midi_out: Arc<Mutex<ChannelOutput>>,
         stamp: u64,
         msg: &MidiInputData<Self::Group>,
         state: &mut Self::State,
