@@ -18,7 +18,7 @@ impl Default for PlayerStates {
         Self {
             last_refresh: Instant::now(),
             last_local_update: Instant::now(),
-            refresh_interval: Duration::from_secs(20),
+            refresh_interval: Duration::from_secs(2),
             local_elapsed: 0,
             shuffle_on: false,
             loop_on: false,

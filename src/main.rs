@@ -25,58 +25,6 @@ use rodio::Sink;
 use std::env;
 use std::sync::{Arc, Mutex};
 
-fn get_base_filter_data(coeffs: Coefficients<f32>) -> FilterData {
-    FilterData {
-        previous_filter_percentage: 1.,
-        filter_type: Type::AllPass,
-        filter: Arc::new(Mutex::new(DirectForm1::<f32>::new(coeffs))),
-    }
-}
-
-fn prepare_audio_states(
-    music_queue: Sink,
-    ambience_queue: Sink,
-    sound_effect_queue: Sink,
-    data: Arc<Mutex<RuntimeData>>,
-    tx_data: &Sender<RuntimeData>,
-) -> (MusicState, SoundState) {
-    let audio_sinks = Arc::new(Mutex::new(AudioSinks {
-        music_queue,
-        ambience_queue,
-        sound_effect_queue,
-    }));
-
-    let sample_rate = 44100.0;
-    let coeffs = Coefficients::<f32>::from_params(
-        Type::AllPass,
-        sample_rate.hz(),
-        44100.hz(),
-        Q_BUTTERWORTH_F32,
-    )
-    .expect("Could not create coeffs to initialize filters");
-    let music_filter_data = Arc::new(Mutex::new(get_base_filter_data(coeffs)));
-    let ambience_filter = Arc::new(Mutex::new(get_base_filter_data(coeffs)));
-    let sound_effect_filter = Arc::new(Mutex::new(get_base_filter_data(coeffs)));
-
-    (
-        MusicState {
-            audio_sinks: audio_sinks.clone(),
-            music_filter: music_filter_data,
-            ambience_filter: ambience_filter.clone(),
-            tx_data: tx_data.clone(),
-            data: data.clone(),
-            sound_effect_filter: sound_effect_filter.clone(),
-        },
-        SoundState {
-            data,
-            audio_sinks,
-            ambience_filter,
-            sound_effect_filter,
-            tx_data: tx_data.clone(),
-        },
-    )
-}
-
 #[derive(Clone)]
 pub struct MidiOutputChannels {
     pub midi_out: Arc<Mutex<ChannelOutput>>,
@@ -199,4 +147,56 @@ fn main() {
         )
         .expect("Application did not complete run correctly");
     }
+}
+
+fn get_base_filter_data(coeffs: Coefficients<f32>) -> FilterData {
+    FilterData {
+        previous_filter_percentage: 1.,
+        filter_type: Type::AllPass,
+        filter: Arc::new(Mutex::new(DirectForm1::<f32>::new(coeffs))),
+    }
+}
+
+fn prepare_audio_states(
+    music_queue: Sink,
+    ambience_queue: Sink,
+    sound_effect_queue: Sink,
+    data: Arc<Mutex<RuntimeData>>,
+    tx_data: &Sender<RuntimeData>,
+) -> (MusicState, SoundState) {
+    let audio_sinks = Arc::new(Mutex::new(AudioSinks {
+        music_queue,
+        ambience_queue,
+        sound_effect_queue,
+    }));
+
+    let sample_rate = 44100.0;
+    let coeffs = Coefficients::<f32>::from_params(
+        Type::AllPass,
+        sample_rate.hz(),
+        44100.hz(),
+        Q_BUTTERWORTH_F32,
+    )
+    .expect("Could not create coeffs to initialize filters");
+    let music_filter_data = Arc::new(Mutex::new(get_base_filter_data(coeffs)));
+    let ambience_filter = Arc::new(Mutex::new(get_base_filter_data(coeffs)));
+    let sound_effect_filter = Arc::new(Mutex::new(get_base_filter_data(coeffs)));
+
+    (
+        MusicState {
+            audio_sinks: audio_sinks.clone(),
+            music_filter: music_filter_data,
+            ambience_filter: ambience_filter.clone(),
+            tx_data: tx_data.clone(),
+            data: data.clone(),
+            sound_effect_filter: sound_effect_filter.clone(),
+        },
+        SoundState {
+            data,
+            audio_sinks,
+            ambience_filter,
+            sound_effect_filter,
+            tx_data: tx_data.clone(),
+        },
+    )
 }
