@@ -55,6 +55,7 @@ cfg-if = "1.0.4"
 
 # file dialog
 rfd = "0.17"
+dirs = "6.0.0"
 
 # Write to config file
 serde = { version = "1.0", features = ["derive"] }

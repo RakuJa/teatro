@@ -1,7 +1,7 @@
 use crate::states::knob_value_update::KnobValueUpdate;
 
 #[derive(Debug, Copy, Clone)]
-pub enum Command {
+pub enum CommsCommand {
     Refresh,
     PadPressed { key: u8 },
     WhiteKeyPressed { key: u8 },

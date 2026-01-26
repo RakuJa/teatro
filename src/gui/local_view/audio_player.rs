@@ -1,4 +1,4 @@
-use crate::gui::comms::command::Command;
+use crate::gui::comms::command::CommsCommand;
 use crate::gui::ui::AkaiVisualizer;
 use eframe::emath::{Pos2, Rect, Vec2};
 use eframe::epaint::{Color32, FontFamily, FontId};
@@ -140,7 +140,7 @@ impl AkaiVisualizer {
             if let Ok(mut x) = self.gui_data.lock() {
                 x.audio_player_states.shuffle_on = !x.audio_player_states.shuffle_on;
             }
-            self.send_command_to_backend(Command::ShufflePressed {});
+            self.send_command_to_backend(CommsCommand::ShufflePressed {});
         }
 
         let mute_rect = Rect::from_min_size(
@@ -176,7 +176,7 @@ impl AkaiVisualizer {
             if let Ok(mut x) = self.gui_data.lock() {
                 x.audio_player_states.mute_on = !x.audio_player_states.mute_on;
             }
-            self.send_command_to_backend(Command::MutePressed {});
+            self.send_command_to_backend(CommsCommand::MutePressed {});
         }
 
         let solo_rect = Rect::from_min_size(
@@ -213,7 +213,7 @@ impl AkaiVisualizer {
             if let Ok(mut x) = self.gui_data.lock() {
                 x.audio_player_states.solo_on = !x.audio_player_states.solo_on;
             }
-            self.send_command_to_backend(Command::SoloPressed {});
+            self.send_command_to_backend(CommsCommand::SoloPressed {});
         }
 
         let stop_all_rect = Rect::from_min_size(
@@ -255,7 +255,7 @@ impl AkaiVisualizer {
             if let Ok(mut x) = self.gui_data.lock() {
                 x.audio_player_states.stop_all_on = !x.audio_player_states.stop_all_on;
             }
-            self.send_command_to_backend(Command::StopAllPressed {});
+            self.send_command_to_backend(CommsCommand::StopAllPressed {});
         }
 
         let title = std::path::Path::new(&file_path)
@@ -477,7 +477,7 @@ impl AkaiVisualizer {
             if let Ok(mut x) = self.gui_data.lock() {
                 x.audio_player_states.pause_on = !x.audio_player_states.pause_on;
             }
-            self.send_command_to_backend(Command::PausePressed {});
+            self.send_command_to_backend(CommsCommand::PausePressed {});
         }
 
         let skip_rect = Rect::from_center_size(
@@ -506,7 +506,7 @@ impl AkaiVisualizer {
 
         let skip_response = ui.interact(skip_rect, ui.id().with("skip_btn"), egui::Sense::click());
         if skip_response.clicked() {
-            self.send_command_to_backend(Command::SkipTrackPressed {});
+            self.send_command_to_backend(CommsCommand::SkipTrackPressed {});
         }
     }
 }

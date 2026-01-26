@@ -1,5 +1,5 @@
 use crate::backend::pad_handler::PadHandler;
-use crate::gui::comms::command::Command;
+use crate::gui::comms::command::CommsCommand;
 use crate::states::music_state::MusicState;
 use crate::states::settings_data::SettingsData;
 use crate::states::visualizer::RuntimeData;
@@ -33,7 +33,7 @@ fn observe_folder(
 
 pub fn handle_watchdog(
     settings_data: &Arc<Mutex<SettingsData>>,
-    rx_command: &Receiver<Command>,
+    rx_command: &Receiver<CommsCommand>,
     tx_data: &Sender<RuntimeData>,
     music_state: &MusicState,
 ) {
@@ -53,7 +53,7 @@ pub fn handle_watchdog(
 
     loop {
         if let Ok(command) = rx_command.recv() {
-            if matches!(command, Command::Refresh) {
+            if matches!(command, CommsCommand::Refresh) {
                 if let Err(e) = hotwatch.unwatch(&last_folder) {
                     warn!("Error while unwatching folder: {e}");
                 } else if let Ok(s) = settings_data.lock() {

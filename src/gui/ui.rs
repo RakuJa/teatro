@@ -1,4 +1,4 @@
-use crate::gui::comms::command::Command;
+use crate::gui::comms::command::CommsCommand;
 use crate::gui::local_view::audio_player_states::PlayerStates;
 use crate::states::settings_data::SettingsData;
 use crate::states::visualizer::RuntimeData;
@@ -18,16 +18,16 @@ pub enum CurrentTab {
 
 pub struct GuiData {
     pub(crate) data: RuntimeData,
-    pub(crate) tx_to_backend: Sender<Command>,
-    pub(crate) tx_to_watchdog: Sender<Command>,
+    pub(crate) tx_to_backend: Sender<CommsCommand>,
+    pub(crate) tx_to_watchdog: Sender<CommsCommand>,
     pub(crate) audio_player_states: PlayerStates,
 }
 
 impl GuiData {
     pub fn new(
         data: RuntimeData,
-        tx_to_backend: Sender<Command>,
-        tx_to_watchdog: Sender<Command>,
+        tx_to_backend: Sender<CommsCommand>,
+        tx_to_watchdog: Sender<CommsCommand>,
     ) -> Self {
         Self {
             data,
@@ -114,7 +114,7 @@ impl eframe::App for AkaiVisualizer {
         });
 
         if need_refresh {
-            self.send_command_to_backend(Command::Refresh {});
+            self.send_command_to_backend(CommsCommand::Refresh {});
         }
         self.update_local_progress(delta_time);
 
@@ -148,7 +148,7 @@ impl eframe::App for AkaiVisualizer {
 }
 
 impl AkaiVisualizer {
-    pub fn send_command_to_backend(&self, command: Command) {
+    pub fn send_command_to_backend(&self, command: CommsCommand) {
         if let Ok(gui_data) = self.gui_data.lock() {
             Self::send_command(&gui_data.tx_to_backend, command);
         } else {
@@ -156,13 +156,13 @@ impl AkaiVisualizer {
         }
     }
 
-    fn send_command(tx: &Sender<Command>, command: Command) {
+    fn send_command(tx: &Sender<CommsCommand>, command: CommsCommand) {
         if let Err(e) = tx.send(command) {
             warn!("Failed to send {command:?} command: {e}");
         }
     }
 
-    pub fn send_command_to_watchdog(&self, command: Command) {
+    pub fn send_command_to_watchdog(&self, command: CommsCommand) {
         if let Ok(gui_data) = self.gui_data.lock() {
             Self::send_command(&gui_data.tx_to_watchdog, command);
         } else {

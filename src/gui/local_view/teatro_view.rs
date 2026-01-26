@@ -1,4 +1,4 @@
-use crate::gui::comms::command::Command;
+use crate::gui::comms::command::CommsCommand;
 use crate::gui::ui::AkaiVisualizer;
 use crate::states::knob_value_update::KnobValueUpdate;
 use eframe::emath::{Pos2, Rect, Vec2};
@@ -530,7 +530,7 @@ impl AkaiVisualizer {
 
                 let pad_response = ui.allocate_rect(pad_rect, egui::Sense::click());
                 if pad_response.clicked() {
-                    self.send_command_to_backend(Command::PadPressed { key: idx });
+                    self.send_command_to_backend(CommsCommand::PadPressed { key: idx });
                 }
 
                 // Enhanced pad colors with glow effect
@@ -661,7 +661,7 @@ impl AkaiVisualizer {
 
             let dec_response = ui.put(dec_rect, egui::Button::new("-").small());
             if dec_response.clicked() {
-                self.send_command_to_backend(Command::KnobPercentageChanged {
+                self.send_command_to_backend(CommsCommand::KnobPercentageChanged {
                     knob: i + 1,
                     value: KnobValueUpdate::Decrement,
                 });
@@ -674,7 +674,7 @@ impl AkaiVisualizer {
 
             let inc_response = ui.put(inc_rect, egui::Button::new("+").small());
             if inc_response.clicked() {
-                self.send_command_to_backend(Command::KnobPercentageChanged {
+                self.send_command_to_backend(CommsCommand::KnobPercentageChanged {
                     knob: i + 1,
                     value: KnobValueUpdate::Increment,
                 });
@@ -707,7 +707,7 @@ impl AkaiVisualizer {
                 let key_response = ui.allocate_rect(key_rect, egui::Sense::click());
 
                 if key_response.clicked() {
-                    self.send_command_to_backend(Command::WhiteKeyPressed { key: i + 1 });
+                    self.send_command_to_backend(CommsCommand::WhiteKeyPressed { key: i + 1 });
                 }
 
                 ui.painter()
@@ -749,7 +749,7 @@ impl AkaiVisualizer {
                 let key_response = ui.allocate_rect(key_rect, egui::Sense::click());
 
                 if key_response.clicked() {
-                    self.send_command_to_backend(Command::BlackKeyPressed { key: i + 1 });
+                    self.send_command_to_backend(CommsCommand::BlackKeyPressed { key: i + 1 });
                 }
 
                 ui.painter()

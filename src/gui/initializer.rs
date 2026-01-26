@@ -1,4 +1,4 @@
-use crate::gui::comms::command::Command;
+use crate::gui::comms::command::CommsCommand;
 use crate::gui::comms::to_gui_from_backend::sync_gui_with_data_received_from_backend;
 use crate::gui::gui_wrapper::GuiWrapper;
 use crate::gui::ui::{AkaiVisualizer, GuiData};
@@ -12,9 +12,9 @@ use std::sync::{Arc, Mutex};
 pub fn gui_initializer(
     backend_data: RuntimeData,
     settings: Arc<Mutex<SettingsData>>,
-    tx_command: Sender<Command>,
+    tx_command: Sender<CommsCommand>,
     rx_data: Receiver<RuntimeData>,
-    watchdog_tx: Sender<Command>,
+    watchdog_tx: Sender<CommsCommand>,
 ) -> eframe::Result {
     let font_folder = env::var("FONT_FOLDER").unwrap_or_else(|_| "ui/fonts".to_string());
 

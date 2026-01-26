@@ -17,7 +17,7 @@ use crate::states::visualizer::RuntimeData;
 use biquad::{Coefficients, DirectForm1, Q_BUTTERWORTH_F32, ToHertz, Type};
 use dotenvy::dotenv;
 use flume::Sender;
-use gui::comms::command::Command;
+use gui::comms::command::CommsCommand;
 use log::warn;
 use ramidier::io::input::InputChannel;
 use ramidier::io::output::ChannelOutput;
@@ -113,8 +113,8 @@ fn main() {
 
     let hw_data = Arc::new(Mutex::new(backend_data.clone()));
     let (tx_data, rx_data) = flume::unbounded::<RuntimeData>();
-    let (gui_command_tx, gui_command_rx) = flume::unbounded::<Command>();
-    let (watchgod_tx, watchdog_rx) = flume::unbounded::<Command>();
+    let (gui_command_tx, gui_command_rx) = flume::unbounded::<CommsCommand>();
+    let (watchgod_tx, watchdog_rx) = flume::unbounded::<CommsCommand>();
 
     let stream_handle = rodio::OutputStreamBuilder::open_default_stream()
         .expect("Audio stream should be writable and readable");
