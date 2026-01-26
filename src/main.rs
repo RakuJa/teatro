@@ -1,13 +1,13 @@
 mod audio;
+mod backend;
 #[cfg(feature = "gui")]
 mod gui;
-mod backend;
 mod os_explorer;
 mod states;
 
-use crate::gui::initializer::gui_initializer;
 use crate::backend::listener_initializer::{prepare_midi_channels, run};
 use crate::backend::pad_handler::PadHandler;
+use crate::gui::initializer::gui_initializer;
 use crate::states::audio_sinks::AudioSinks;
 use crate::states::filter_data::FilterData;
 use crate::states::music_state::MusicState;
@@ -18,6 +18,7 @@ use biquad::{Coefficients, DirectForm1, Q_BUTTERWORTH_F32, ToHertz, Type};
 use dotenvy::dotenv;
 use flume::Sender;
 use gui::comms::command::Command;
+use log::warn;
 use ramidier::io::input::InputChannel;
 use ramidier::io::output::ChannelOutput;
 use rodio::Sink;
@@ -94,8 +95,11 @@ fn main() {
     let config_path = env::var("CONFIG_PATH").unwrap_or_else(|_| "config.yml".to_string());
 
     let settings_data = SettingsData::load_from_config(&config_path).unwrap_or_default();
-    let pad_labels = PadHandler::get_pad_albums_list(&settings_data.music_folder)
-        .expect("Music folder should be readable");
+    let pad_labels =
+        PadHandler::get_pad_albums_list(&settings_data.music_folder).unwrap_or_else(|e| {
+            warn!("Could not load pads, music path is not readable: {e}");
+            vec![]
+        });
     let settings = Arc::new(Mutex::new(settings_data));
     let _watchdog_settings = settings.clone();
 

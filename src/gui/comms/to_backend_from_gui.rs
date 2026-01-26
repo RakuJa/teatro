@@ -1,8 +1,8 @@
 use crate::MidiOutputChannels;
-use crate::gui::comms::command::Command;
 use crate::backend::hw_handler::MidiHandler;
 use crate::backend::keyboard_handler::KeyboardHandler;
 use crate::backend::pad_handler::PadHandler;
+use crate::gui::comms::command::Command;
 use crate::states::music_state::MusicState;
 use crate::states::sound_state::SoundState;
 use crate::states::visualizer::RuntimeData;
@@ -21,7 +21,6 @@ pub fn handle_gui_command_and_relay_them_to_backend(
     sound_state: &SoundState,
     midi_out_channel: Option<MidiOutputChannels>,
 ) {
-
     loop {
         if let Ok(command) = rx_command.recv() {
             debug!("{command:?}");

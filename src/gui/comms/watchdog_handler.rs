@@ -1,5 +1,5 @@
-use crate::gui::comms::command::Command;
 use crate::backend::pad_handler::PadHandler;
+use crate::gui::comms::command::Command;
 use crate::states::music_state::MusicState;
 use crate::states::settings_data::SettingsData;
 use crate::states::visualizer::RuntimeData;
