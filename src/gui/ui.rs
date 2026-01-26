@@ -1,5 +1,7 @@
-use crate::comms::command::{Command, Device};
-use crate::states::visualizer::AkaiData;
+use crate::gui::comms::command::Command;
+use crate::gui::local_view::audio_player_states::PlayerStates;
+use crate::states::settings_data::SettingsData;
+use crate::states::visualizer::RuntimeData;
 use eframe::egui;
 use egui_font_loader::{LoaderFontData, load_fonts};
 use flume::Sender;
@@ -11,38 +13,27 @@ use std::time::{Duration, Instant};
 pub enum CurrentTab {
     Visualizer,
     WebView,
+    Settings,
 }
 
 pub struct GuiData {
-    pub(crate) data: AkaiData,
-    pub(crate) tx_command: Sender<Command>,
-    last_refresh: Instant,
-    last_local_update: Instant,
-    refresh_interval: Duration,
-    pub(crate) local_elapsed: u64,
-    pub(crate) shuffle_on: bool,
-    pub(crate) loop_on: bool,
-    pub(crate) mute_on: bool,
-    pub(crate) pause_on: bool,
-    pub(crate) solo_on: bool,
-    pub(crate) stop_all_on: bool,
+    pub(crate) data: RuntimeData,
+    pub(crate) tx_to_backend: Sender<Command>,
+    pub(crate) tx_to_watchdog: Sender<Command>,
+    pub(crate) audio_player_states: PlayerStates,
 }
 
 impl GuiData {
-    pub fn new(data: AkaiData, tx_command: Sender<Command>) -> Self {
+    pub fn new(
+        data: RuntimeData,
+        tx_to_backend: Sender<Command>,
+        tx_to_watchdog: Sender<Command>,
+    ) -> Self {
         Self {
             data,
-            tx_command,
-            last_refresh: Instant::now(),
-            last_local_update: Instant::now(),
-            refresh_interval: Duration::from_secs(2),
-            local_elapsed: 0,
-            shuffle_on: false,
-            loop_on: false,
-            mute_on: false,
-            pause_on: false,
-            solo_on: false,
-            stop_all_on: false,
+            tx_to_backend,
+            tx_to_watchdog,
+            audio_player_states: PlayerStates::default(),
         }
     }
 }
@@ -50,6 +41,7 @@ impl GuiData {
 pub struct AkaiVisualizer {
     pub(crate) gui_data: Arc<Mutex<GuiData>>,
     pub(crate) info_panel_data: InfoPanelData,
+    pub(crate) settings_data: SettingsData,
     pub(crate) current_tab: CurrentTab,
     pub(crate) webview_error: Option<String>,
 }
@@ -63,6 +55,7 @@ pub struct InfoPanelData {
 impl AkaiVisualizer {
     pub fn new(
         cc: &eframe::CreationContext<'_>,
+        settings_data: &Arc<Mutex<SettingsData>>,
         gui_data: Arc<Mutex<GuiData>>,
         font_folder: &str,
         initial_n_of_info: usize,
@@ -87,6 +80,9 @@ impl AkaiVisualizer {
                 initial_n_of_info,
                 editing_index: None,
             },
+            settings_data: settings_data
+                .lock()
+                .map_or_else(|_| SettingsData::default(), |s| s.clone()),
             current_tab: CurrentTab::Visualizer,
             webview_error: None,
         }
@@ -98,16 +94,19 @@ impl eframe::App for AkaiVisualizer {
         ctx.request_repaint_after(Duration::from_millis(16));
         let now = Instant::now();
         let delta_time = self.gui_data.lock().map_or(0, |gui_data| {
-            now.duration_since(gui_data.last_local_update).as_millis() as u64
+            now.duration_since(gui_data.audio_player_states.last_local_update)
+                .as_millis() as u64
         });
 
         if let Ok(mut gui_data) = self.gui_data.lock() {
-            gui_data.last_local_update = now;
+            gui_data.audio_player_states.last_local_update = now;
         }
 
         let need_refresh = self.gui_data.lock().is_ok_and(|mut gui_data| {
-            if now.duration_since(gui_data.last_refresh) >= gui_data.refresh_interval {
-                gui_data.last_refresh = now;
+            if now.duration_since(gui_data.audio_player_states.last_refresh)
+                >= gui_data.audio_player_states.refresh_interval
+            {
+                gui_data.audio_player_states.last_refresh = now;
                 true
             } else {
                 false
@@ -115,9 +114,7 @@ impl eframe::App for AkaiVisualizer {
         });
 
         if need_refresh {
-            self.send_command(Command::Refresh {
-                device: Device::ToBackend,
-            });
+            self.send_command_to_backend(Command::Refresh {});
         }
         self.update_local_progress(delta_time);
 
@@ -131,7 +128,8 @@ impl eframe::App for AkaiVisualizer {
                         CurrentTab::WebView,
                         "web BYBE - Shop & Encounters",
                     );
-                }
+                };
+                ui.selectable_value(&mut self.current_tab, CurrentTab::Settings, "Settings");
             });
             ui.separator();
 
@@ -143,17 +141,30 @@ impl eframe::App for AkaiVisualizer {
                         self.render_webview_tab(ui);
                     }
                 }
+                CurrentTab::Settings => self.render_settings_tab(ui),
             }
         });
     }
 }
 
 impl AkaiVisualizer {
-    pub fn send_command(&self, command: Command) {
+    pub fn send_command_to_backend(&self, command: Command) {
         if let Ok(gui_data) = self.gui_data.lock() {
-            if let Err(e) = gui_data.tx_command.send(command) {
-                warn!("Failed to send {command:?} command: {e}");
-            }
+            Self::send_command(&gui_data.tx_to_backend, command);
+        } else {
+            warn!("Failed to lock the gui_data lock.");
+        }
+    }
+
+    fn send_command(tx: &Sender<Command>, command: Command) {
+        if let Err(e) = tx.send(command) {
+            warn!("Failed to send {command:?} command: {e}");
+        }
+    }
+
+    pub fn send_command_to_watchdog(&self, command: Command) {
+        if let Ok(gui_data) = self.gui_data.lock() {
+            Self::send_command(&gui_data.tx_to_watchdog, command);
         } else {
             warn!("Failed to lock the gui_data lock.");
         }

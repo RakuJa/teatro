@@ -1,6 +1,6 @@
-use crate::hardware_handler::hw_handler::MidiHandler;
-use crate::hardware_handler::keyboard_handler::KeyboardHandler;
-use crate::hardware_handler::pad_handler::PadHandler;
+use crate::backend::hw_handler::MidiHandler;
+use crate::backend::keyboard_handler::KeyboardHandler;
+use crate::backend::pad_handler::PadHandler;
 use crate::states::music_state::MusicState;
 use crate::states::sound_state::SoundState;
 use crate::{MidiInputChannels, MidiOutputChannels};

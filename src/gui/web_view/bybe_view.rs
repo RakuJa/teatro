@@ -63,7 +63,7 @@ impl AkaiVisualizer {
                 let _webview = {
                     use tao::platform::unix::WindowExtUnix;
                     use wry::WebViewBuilderExtUnix;
-                    let vbox = window.default_vbox().unwrap();
+                    let vbox = window.default_vbox().expect("no default vbox");
                     builder.build_gtk(vbox)
                 };
 

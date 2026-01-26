@@ -1,8 +1,8 @@
-use crate::hardware_handler::hw_handler::MidiHandler;
+use crate::backend::hw_handler::MidiHandler;
 use crate::os_explorer::explorer::find_file_with_prefix;
 use crate::states::audio_sinks::AudioSinks;
 use crate::states::sound_state::SoundState;
-use crate::states::visualizer::AkaiData;
+use crate::states::visualizer::RuntimeData;
 use anyhow::bail;
 use flume::Sender;
 use log::{debug, warn};
@@ -13,10 +13,6 @@ use std::sync::{Arc, Mutex};
 
 const fn is_ambience_key(k: u8) -> bool {
     matches!(k, 2 | 4 | 7 | 9 | 11 | 14 | 16 | 19 | 21 | 23)
-}
-
-pub enum WhiteKey {
-    Key(u8),
 }
 
 const fn map_key_to_black_key_index(key: u8) -> u8 {
@@ -65,10 +61,10 @@ impl MidiHandler for KeyboardHandler {
     type State = SoundState;
 
     fn refresh(
-        stale_data: &AkaiData,
-        _tx_data: &Sender<AkaiData>,
+        stale_data: &RuntimeData,
+        _tx_data: &Sender<RuntimeData>,
         _audio_sinks: &AudioSinks,
-    ) -> AkaiData {
+    ) -> RuntimeData {
         stale_data.clone()
     }
 
@@ -102,7 +98,7 @@ impl KeyboardHandler {
 
     fn play_sound_file(
         key: u8,
-        data: &AkaiData,
+        data: &RuntimeData,
         audio_sinks: &AudioSinks,
         state: &SoundState,
     ) -> anyhow::Result<()> {
@@ -110,7 +106,10 @@ impl KeyboardHandler {
         let (index, folder, filter, volume) = if w_k > 0 {
             (
                 w_k,
-                data.sound_effect_folder.clone(),
+                data.settings_data.lock().map_or_else(
+                    |_| "sound_effect".to_string(),
+                    |x| x.sound_effect_folder.clone(),
+                ),
                 state.sound_effect_filter.clone(),
                 data.get_sound_effect_volume(),
             )
@@ -121,7 +120,9 @@ impl KeyboardHandler {
             }
             (
                 b_k,
-                data.ambience_folder.clone(),
+                data.settings_data
+                    .lock()
+                    .map_or_else(|_| "ambience".to_string(), |x| x.ambience_folder.clone()),
                 state.ambience_filter.clone(),
                 data.get_ambience_volume(),
             )

@@ -1,6 +1,6 @@
 use crate::states::audio_sinks::AudioSinks;
 use crate::states::filter_data::FilterData;
-use crate::states::visualizer::AkaiData;
+use crate::states::visualizer::RuntimeData;
 use flume::Sender;
 use std::sync::{Arc, Mutex};
 
@@ -9,7 +9,7 @@ pub struct MusicState {
     pub music_filter: Arc<Mutex<FilterData>>,
     pub ambience_filter: Arc<Mutex<FilterData>>,
     pub sound_effect_filter: Arc<Mutex<FilterData>>,
-    pub data: Arc<Mutex<AkaiData>>,
+    pub data: Arc<Mutex<RuntimeData>>,
     pub audio_sinks: Arc<Mutex<AudioSinks>>,
-    pub tx_data: Sender<AkaiData>,
+    pub tx_data: Sender<RuntimeData>,
 }

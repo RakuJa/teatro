@@ -1,6 +1,6 @@
 use crate::MusicState;
 use crate::audio::playback_handler;
-use crate::hardware_handler::hw_handler::MidiHandler;
+use crate::backend::hw_handler::MidiHandler;
 use crate::os_explorer::explorer::{
     get_album_name_from_folder_in_path, map_to_indexed_vec, search_files_in_path,
 };
@@ -8,7 +8,7 @@ use crate::states::audio_sinks::AudioSinks;
 use crate::states::button_states::ToggleStates;
 use crate::states::filter_data::FilterData;
 use crate::states::knob_value_update::KnobValueUpdate;
-use crate::states::visualizer::AkaiData;
+use crate::states::visualizer::RuntimeData;
 use biquad::Type;
 use flume::Sender;
 use log::{debug, info, warn};
@@ -46,20 +46,18 @@ impl MidiHandler for PadHandler {
     type State = MusicState;
 
     fn refresh(
-        stale_data: &AkaiData,
-        tx_data: &Sender<AkaiData>,
+        old_data: &RuntimeData,
+        tx_data: &Sender<RuntimeData>,
         audio_sinks: &AudioSinks,
-    ) -> AkaiData {
-        let x = stale_data.current_playlist.as_ref().map_or_else(
-            || stale_data.clone(),
-            |playlist| AkaiData {
-                music_folder: stale_data.music_folder.clone(),
-                ambience_folder: stale_data.ambience_folder.clone(),
-                sound_effect_folder: stale_data.sound_effect_folder.clone(),
-                pad_labels: stale_data.pad_labels.clone(),
-                knob_values: stale_data.knob_values.clone(),
-                button_states: stale_data.button_states,
-                last_pad_pressed: stale_data.last_pad_pressed,
+    ) -> RuntimeData {
+        let x = old_data.current_playlist.as_ref().map_or_else(
+            || old_data.clone(),
+            |playlist| RuntimeData {
+                settings_data: old_data.settings_data.clone(),
+                pad_labels: old_data.pad_labels.clone(),
+                knob_values: old_data.knob_values.clone(),
+                button_states: old_data.button_states,
+                last_pad_pressed: old_data.last_pad_pressed,
                 current_playlist: Some(Self::get_current_playlist_state(
                     playlist.clone(),
                     &audio_sinks.music_queue,
@@ -104,14 +102,16 @@ impl PadHandler {
     }
 
     pub fn update_pad_albums_list(
-        stale_data: &AkaiData,
-        tx_data: &Sender<AkaiData>,
-    ) -> anyhow::Result<AkaiData> {
-        let data = AkaiData {
-            music_folder: stale_data.music_folder.clone(),
-            ambience_folder: stale_data.ambience_folder.clone(),
-            sound_effect_folder: stale_data.sound_effect_folder.clone(),
-            pad_labels: Self::get_pad_albums_list(&stale_data.music_folder)?,
+        stale_data: &RuntimeData,
+        tx_data: &Sender<RuntimeData>,
+    ) -> anyhow::Result<RuntimeData> {
+        let folder = stale_data
+            .settings_data
+            .lock()
+            .map_or_else(|_| "music".to_string(), |x| x.music_folder.clone());
+        let data = RuntimeData {
+            settings_data: stale_data.settings_data.clone(),
+            pad_labels: Self::get_pad_albums_list(&folder)?,
             knob_values: stale_data.knob_values.clone(),
             button_states: stale_data.button_states,
             last_pad_pressed: stale_data.last_pad_pressed,
@@ -226,7 +226,13 @@ impl PadHandler {
             let old_pad = data.last_pad_pressed;
             data.last_pad_pressed = Some(note);
             let prefix = format!("{note:02}_");
-            if let Ok(res) = search_files_in_path(data.music_folder.as_str(), prefix.as_str()) {
+            if let Ok(res) = search_files_in_path(
+                data.settings_data
+                    .lock()
+                    .map_or_else(|_| "music".to_string(), |x| x.music_folder.clone())
+                    .as_ref(),
+                prefix.as_str(),
+            ) {
                 info!("playing the following audio folder: {}", res.0.display());
                 let mut files = res
                     .1

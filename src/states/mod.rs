@@ -4,5 +4,6 @@ pub mod filter_data;
 pub mod knob_value_update;
 pub mod music_state;
 pub mod playlist_data;
+pub mod settings_data;
 pub mod sound_state;
 pub mod visualizer;

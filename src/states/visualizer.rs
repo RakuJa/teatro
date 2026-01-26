@@ -1,13 +1,13 @@
 use crate::states::button_states::ToggleStates;
 use crate::states::playlist_data::PlaylistData;
+use crate::states::settings_data::SettingsData;
 use bon::bon;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Debug)]
-pub struct AkaiData {
-    pub music_folder: String,
-    pub ambience_folder: String,
-    pub sound_effect_folder: String,
+pub struct RuntimeData {
+    pub settings_data: Arc<Mutex<SettingsData>>,
     pub pad_labels: Vec<String>,
     pub knob_values: HashMap<u8, f32>,
     pub button_states: ToggleStates,
@@ -16,12 +16,10 @@ pub struct AkaiData {
 }
 
 #[bon]
-impl AkaiData {
+impl RuntimeData {
     #[builder]
     pub fn new(
-        music_folder: &str,
-        ambience_folder: &str,
-        sound_effect_folder: &str,
+        settings_data: Arc<Mutex<SettingsData>>,
         pad_labels: Option<Vec<String>>,
         knob_values: Option<HashMap<u8, f32>>,
         button_states: Option<ToggleStates>,
@@ -29,9 +27,7 @@ impl AkaiData {
         current_playlist: Option<PlaylistData>,
     ) -> Self {
         Self {
-            music_folder: music_folder.to_string(),
-            ambience_folder: ambience_folder.to_string(),
-            sound_effect_folder: sound_effect_folder.to_string(),
+            settings_data,
             pad_labels: pad_labels.unwrap_or_else(|| vec![String::new(); 40]),
             knob_values: knob_values.unwrap_or_else(|| {
                 HashMap::from([
@@ -55,8 +51,7 @@ impl AkaiData {
         self.button_states = new_data.button_states;
         self.pad_labels = new_data.pad_labels;
         self.button_states = new_data.button_states;
-        self.music_folder = new_data.music_folder;
-        self.ambience_folder = new_data.ambience_folder;
+        self.settings_data = new_data.settings_data;
         self.current_playlist = new_data.current_playlist;
         self.last_pad_pressed = new_data.last_pad_pressed;
     }

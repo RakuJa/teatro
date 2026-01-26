@@ -2,7 +2,7 @@ use crate::FilterData;
 use crate::audio::playback_handler;
 use crate::states::audio_sinks::AudioSinks;
 use crate::states::playlist_data::{PlaylistData, Track};
-use crate::states::visualizer::AkaiData;
+use crate::states::visualizer::RuntimeData;
 use flume::Sender;
 use log::warn;
 use ramidier::io::input_data::MidiInputData;
@@ -14,13 +14,14 @@ pub trait MidiHandler {
     type Group;
 
     type State;
-    fn refresh(
-        stale_data: &AkaiData,
-        tx_data: &Sender<AkaiData>,
-        audio_sinks: &AudioSinks,
-    ) -> AkaiData;
 
-    fn update_gui(tx_channel: &Sender<AkaiData>, data: &AkaiData) {
+    fn refresh(
+        old_data: &RuntimeData,
+        tx_data: &Sender<RuntimeData>,
+        audio_sinks: &AudioSinks,
+    ) -> RuntimeData;
+
+    fn update_gui(tx_channel: &Sender<RuntimeData>, data: &RuntimeData) {
         match tx_channel.send(data.clone()) {
             Ok(()) => (),
             _ => warn!("Failed to send data to update GUI"),

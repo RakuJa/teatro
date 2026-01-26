@@ -1,22 +1,23 @@
 mod audio;
-mod comms;
 #[cfg(feature = "gui")]
 mod gui;
-mod hardware_handler;
+mod backend;
 mod os_explorer;
 mod states;
 
-use crate::comms::command::Command;
 use crate::gui::initializer::gui_initializer;
-use crate::hardware_handler::pad_handler::PadHandler;
+use crate::backend::listener_initializer::{prepare_midi_channels, run};
+use crate::backend::pad_handler::PadHandler;
 use crate::states::audio_sinks::AudioSinks;
 use crate::states::filter_data::FilterData;
 use crate::states::music_state::MusicState;
+use crate::states::settings_data::SettingsData;
 use crate::states::sound_state::SoundState;
-use crate::states::visualizer::AkaiData;
+use crate::states::visualizer::RuntimeData;
 use biquad::{Coefficients, DirectForm1, Q_BUTTERWORTH_F32, ToHertz, Type};
-use dotenv::dotenv;
+use dotenvy::dotenv;
 use flume::Sender;
+use gui::comms::command::Command;
 use ramidier::io::input::InputChannel;
 use ramidier::io::output::ChannelOutput;
 use rodio::Sink;
@@ -35,8 +36,8 @@ fn prepare_audio_states(
     music_queue: Sink,
     ambience_queue: Sink,
     sound_effect_queue: Sink,
-    data: Arc<Mutex<AkaiData>>,
-    tx_data: &Sender<AkaiData>,
+    data: Arc<Mutex<RuntimeData>>,
+    tx_data: &Sender<RuntimeData>,
 ) -> (MusicState, SoundState) {
     let audio_sinks = Arc::new(Mutex::new(AudioSinks {
         music_queue,
@@ -90,23 +91,26 @@ fn main() {
     dotenv().ok();
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
-    let music_folder = env::var("MUSIC_FOLDER").unwrap_or_else(|_| "music".to_string());
-    let ambience_folder = env::var("AMBIENCE_FOLDER").unwrap_or_else(|_| "ambience".to_string());
-    let sound_effect_folder = env::var("SOUND_FOLDER").unwrap_or_else(|_| "sound".to_string());
+    let config_path = env::var("CONFIG_PATH").unwrap_or_else(|_| "config.yml".to_string());
 
-    let pad_labels =
-        PadHandler::get_pad_albums_list(&music_folder).expect("Music folder should be readable");
+    let settings_data = SettingsData::load_from_config(&config_path).unwrap_or_default();
+    let pad_labels = PadHandler::get_pad_albums_list(&settings_data.music_folder)
+        .expect("Music folder should be readable");
+    let settings = Arc::new(Mutex::new(settings_data));
+    let _watchdog_settings = settings.clone();
 
-    let backend_data = AkaiData::builder()
-        .music_folder(&music_folder)
-        .ambience_folder(&ambience_folder)
-        .sound_effect_folder(&sound_effect_folder)
+    #[cfg(feature = "gui")]
+    let watchdog_settings = settings.clone();
+
+    let backend_data = RuntimeData::builder()
+        .settings_data(settings)
         .pad_labels(pad_labels)
         .build();
 
     let hw_data = Arc::new(Mutex::new(backend_data.clone()));
-    let (tx_data, rx_data) = flume::unbounded::<AkaiData>();
-    let (tx_command, rx_command) = flume::unbounded::<Command>();
+    let (tx_data, rx_data) = flume::unbounded::<RuntimeData>();
+    let (gui_command_tx, gui_command_rx) = flume::unbounded::<Command>();
+    let (watchgod_tx, watchdog_rx) = flume::unbounded::<Command>();
 
     let stream_handle = rodio::OutputStreamBuilder::open_default_stream()
         .expect("Audio stream should be writable and readable");
@@ -124,17 +128,15 @@ fn main() {
 
     cfg_if::cfg_if! {
         if #[cfg(all(feature = "midi", not(feature = "gui")))] {
-            use crate::hardware_handler::listener_initializer::{prepare_midi_channels, run};
             if let Ok(midi_channels) = prepare_midi_channels() {
                 if let Err(err) = run(&states.0, &states.1, midi_channels.0, midi_channels.1) {
                     eprintln!("MIDI Error: {err}");
                 };
             };
         } else if #[cfg(all(feature = "midi", feature = "gui"))]{
-            use crate::hardware_handler::listener_initializer::{prepare_midi_channels, run};
             let m_state = states.0.clone();
             let s_state = states.1.clone();
-            let midi_channels = prepare_midi_channels().unwrap();
+            let midi_channels = prepare_midi_channels().expect("Could not create midi channels");
             let in_channels = midi_channels.0;
             let inner_out_channels = midi_channels.1.clone();
             let midi_out_channels = Some(midi_channels.1);
@@ -150,18 +152,23 @@ fn main() {
 
     #[cfg(feature = "gui")]
     {
-        use crate::gui::sync_handler::handle_gui_command_and_relay_them_to_backend;
-        use hotwatch::{Event, EventKind, Hotwatch};
+        use crate::gui::comms::to_backend_from_gui::handle_gui_command_and_relay_them_to_backend;
+        use crate::gui::comms::watchdog_handler::handle_watchdog;
+
         let music_state = states.0;
         let sound_state = states.1;
         let m_state_watchdog = music_state.clone();
 
         let gui_tx_data = tx_data.clone();
-        let sync_tx_command = tx_command.clone();
+        let watchdog_tx_data = tx_data;
+
+        let sync_tx_command = gui_command_tx.clone();
+
+        let gui_settings = watchdog_settings.clone();
 
         std::thread::spawn(move || {
             handle_gui_command_and_relay_them_to_backend(
-                &rx_command,
+                &gui_command_rx,
                 &sync_tx_command,
                 &gui_tx_data,
                 &music_state,
@@ -170,19 +177,22 @@ fn main() {
             );
         });
 
-        let mut hotwatch = Hotwatch::new().expect("hotwatch failed to initialize!");
-        hotwatch
-            .watch(music_folder, move |event: Event| {
-                if let EventKind::Modify(_) = event.kind {
-                    if let Ok(mut data) = m_state_watchdog.data.lock() {
-                        if let Ok(new_data) = PadHandler::update_pad_albums_list(&data, &tx_data) {
-                            data.copy_data(new_data);
-                        }
-                    }
-                }
-            })
-            .expect("failed to watch folder!");
-        gui_initializer(backend_data, tx_command, rx_data)
-            .expect("Application did not complete run correctly");
+        std::thread::spawn(move || {
+            handle_watchdog(
+                &watchdog_settings,
+                &watchdog_rx,
+                &watchdog_tx_data,
+                &m_state_watchdog,
+            );
+        });
+
+        gui_initializer(
+            backend_data,
+            gui_settings,
+            gui_command_tx,
+            rx_data,
+            watchgod_tx,
+        )
+        .expect("Application did not complete run correctly");
     }
 }

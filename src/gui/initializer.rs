@@ -1,17 +1,20 @@
-use crate::comms::command::Command;
+use crate::gui::comms::command::Command;
+use crate::gui::comms::to_gui_from_backend::sync_gui_with_data_received_from_backend;
 use crate::gui::gui_wrapper::GuiWrapper;
-use crate::gui::sync_handler::sync_gui_with_data_received_from_backend;
 use crate::gui::ui::{AkaiVisualizer, GuiData};
-use crate::states::visualizer::AkaiData;
+use crate::states::settings_data::SettingsData;
+use crate::states::visualizer::RuntimeData;
 use flume::{Receiver, Sender};
 use std::env;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 pub fn gui_initializer(
-    backend_data: AkaiData,
+    backend_data: RuntimeData,
+    settings: Arc<Mutex<SettingsData>>,
     tx_command: Sender<Command>,
-    rx_data: Receiver<AkaiData>,
+    rx_data: Receiver<RuntimeData>,
+    watchdog_tx: Sender<Command>,
 ) -> eframe::Result {
     let font_folder = env::var("FONT_FOLDER").unwrap_or_else(|_| "ui/fonts".to_string());
 
@@ -27,7 +30,7 @@ pub fn gui_initializer(
         .unwrap_or_else(|_| "10".to_string())
         .parse::<usize>()
         .expect("INITIAL_N_OF_INFO should be a positive number");
-    let gui_data = GuiData::new(backend_data, tx_command);
+    let gui_data = GuiData::new(backend_data, tx_command, watchdog_tx);
 
     let arc_gui_data = Arc::new(Mutex::new(gui_data));
     let gui_data_sync = arc_gui_data.clone();
@@ -40,10 +43,13 @@ pub fn gui_initializer(
                 style.animation_time = 0.08;
             });
             ctx.options_mut(|o| {
-                o.max_passes = std::num::NonZeroUsize::new(2).unwrap();
+                if let Some(x) = std::num::NonZeroUsize::new(2) {
+                    o.max_passes = x;
+                }
             });
             let state = Rc::new(Mutex::new(AkaiVisualizer::new(
                 cc,
+                &settings,
                 arc_gui_data,
                 &font_folder,
                 n_of_i,
