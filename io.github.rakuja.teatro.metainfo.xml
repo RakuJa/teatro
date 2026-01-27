@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+    <id>io.github.rakuja.teatro</id>
+    <metadata_license>CC0-1.0</metadata_license>
+    <project_license>EUPL-1.2</project_license>
+    <name>Teatro</name>
+    <summary>Audio player with MIDI support, TTRPG Helper.</summary>
+
+    <description>
+        <p>
+            Teatro is an audio control application designed to help handle TTRPG sessions.
+            It provides comprehensive audio playback, effects, and MIDI control capabilities.
+        </p>
+    </description>
+
+    <launchable type="desktop-id">io.github.rakuja.teatro.desktop</launchable>
+
+    <url type="homepage">https://github.io/RakuJa/teatro</url>
+    <url type="bugtracker">https://github.io/RakuJa/teatro/issues</url>
+
+    <developer_name>RakuJa</developer_name>
+
+    <content_rating type="oars-1.1" />
+
+    <releases>
+        <release version="1.0.0" date="2026-01-24">
+            <description>
+                <p>Initial release</p>
+            </description>
+        </release>
+    </releases>
+
+    <screenshots>
+        <screenshot type="default">
+            <caption>Main application window</caption>
+            https://github.com/RakuJa/teatro/blob/main/ui.png
+        </screenshot>
+    </screenshots>
+</component>

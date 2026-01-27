@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Teatro
+GenericName=Audio Controller
+Comment=TTRPG organizer and audio controller
+Icon=io.github.rakuja.teatro
+Exec=teatro
+Terminal=false
+Categories=Audio;Midi;
+Keywords=audio;midi;controller;akai;
