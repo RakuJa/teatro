@@ -18,7 +18,7 @@ pub fn gui_initializer(
 ) -> eframe::Result {
     let font_folder = env::var("FONT_FOLDER").unwrap_or_else(|_| "ui/fonts".to_string());
 
-    let options = eframe::NativeOptions {
+    let mut options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1200.0, 800.0])
             .with_min_inner_size([1200.0, 800.0])
@@ -31,6 +31,13 @@ pub fn gui_initializer(
         .parse::<usize>()
         .expect("INITIAL_N_OF_INFO should be a positive number");
     let gui_data = GuiData::new(backend_data, tx_command, watchdog_tx);
+
+    let icon_path = format!("{}/{}", env::var("ICON_PATH").unwrap_or_else(|_| "ui/icons".to_string()), "teatro.png");
+    if let Ok(icon_bytes) = std::fs::read(icon_path)
+        && let Ok(d) = eframe::icon_data::from_png_bytes(&icon_bytes)
+    {
+        options.viewport.icon = Some(Arc::new(d));
+    }
 
     let arc_gui_data = Arc::new(Mutex::new(gui_data));
     let gui_data_sync = arc_gui_data.clone();
