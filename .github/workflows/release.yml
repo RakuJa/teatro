@@ -30,8 +30,7 @@ jobs:
 
       - name: Extract version and app-id
         run: |
-            APP_ID=$(grep -oP 'app-id:\s*\K\S+' io.github.rakuja.teatro.yml || echo "io.github.rakuja.teatro")
-
+          APP_ID=$(grep -oP 'app-id:\s*\K\S+' io.github.rakuja.teatro.yml || echo "io.github.rakuja.teatro")
           
           VERSION=${GITHUB_REF_NAME#v}  # Removes 'v' prefix from tag
           if [ -z "$VERSION" ]; then
