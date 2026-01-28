@@ -32,7 +32,11 @@ pub fn gui_initializer(
         .expect("INITIAL_N_OF_INFO should be a positive number");
     let gui_data = GuiData::new(backend_data, tx_command, watchdog_tx);
 
-    let icon_path = format!("{}/{}", env::var("ICON_PATH").unwrap_or_else(|_| "ui/icons".to_string()), "teatro.png");
+    let icon_path = format!(
+        "{}/{}",
+        env::var("ICON_PATH").unwrap_or_else(|_| "ui/icons".to_string()),
+        "teatro.png"
+    );
     if let Ok(icon_bytes) = std::fs::read(icon_path)
         && let Ok(d) = eframe::icon_data::from_png_bytes(&icon_bytes)
     {

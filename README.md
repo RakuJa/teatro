@@ -53,5 +53,5 @@ flatpak-builder --force-clean --user --install-deps-from=flathub --repo=repo --i
 7. Bundle
 ```bash
 flatpak-builder --force-clean --repo=repo build-dir io.github.rakuja.teatro.yml
-flatpak build-bundle repo your-app.flatpak io.github.rakuja.teatro
+flatpak build-bundle repo io.github.rakuja.teatro io.github.rakuja.teatro
 ```

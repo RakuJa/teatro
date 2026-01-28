@@ -88,15 +88,18 @@ fn main() {
         } else if #[cfg(all(feature = "midi", feature = "gui"))]{
             let m_state = states.0.clone();
             let s_state = states.1.clone();
-            let midi_channels = prepare_midi_channels().expect("Could not create midi channels");
-            let in_channels = midi_channels.0;
-            let inner_out_channels = midi_channels.1.clone();
-            let midi_out_channels = Some(midi_channels.1);
-            std::thread::spawn(move || {
-                if let Err(err) = run(&m_state, &s_state, in_channels, inner_out_channels) {
-                    eprintln!("MIDI Error: {err}");
-                }
-            });
+            let midi_out_channels = if let Ok((in_channels, out_channels)) = prepare_midi_channels() {
+                let inner_out_channels = out_channels.clone();
+                std::thread::spawn(move || {
+                    if let Err(err) = run(&m_state, &s_state, in_channels, inner_out_channels) {
+                        eprintln!("MIDI Error: {err}");
+                    }
+                });
+                Some(out_channels)
+            } else {
+                warn!("Could not create midi channels, change ports or connect the midi keyboard");
+                None
+            };
         } else {
             let midi_out_channels = None;
         }
