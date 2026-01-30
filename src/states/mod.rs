@@ -1,6 +1,7 @@
 pub mod audio_sinks;
 pub mod button_states;
 pub mod filter_data;
+pub mod information_data;
 pub mod knob_value_update;
 pub mod music_state;
 pub mod playlist_data;

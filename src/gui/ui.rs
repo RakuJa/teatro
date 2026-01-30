@@ -1,5 +1,6 @@
 use crate::gui::comms::command::CommsCommand;
-use crate::gui::local_view::audio_player_states::PlayerStates;
+use crate::gui::local_view::audio_player_states::PlayerInfo;
+use crate::states::information_data::InformationEntry;
 use crate::states::settings_data::SettingsData;
 use crate::states::visualizer::RuntimeData;
 use eframe::egui;
@@ -7,7 +8,7 @@ use egui_font_loader::{LoaderFontData, load_fonts};
 use flume::Sender;
 use log::warn;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum CurrentTab {
@@ -20,7 +21,7 @@ pub struct GuiData {
     pub(crate) data: RuntimeData,
     pub(crate) tx_to_backend: Sender<CommsCommand>,
     pub(crate) tx_to_watchdog: Sender<CommsCommand>,
-    pub(crate) audio_player_states: PlayerStates,
+    pub(crate) player_info: PlayerInfo,
 }
 
 impl GuiData {
@@ -33,7 +34,7 @@ impl GuiData {
             data,
             tx_to_backend,
             tx_to_watchdog,
-            audio_player_states: PlayerStates::default(),
+            player_info: PlayerInfo::default(),
         }
     }
 }
@@ -47,8 +48,8 @@ pub struct AkaiVisualizer {
 }
 
 pub struct InfoPanelData {
-    pub(crate) combattant_lists: Vec<String>,
-    pub(crate) initial_n_of_info: usize,
+    pub(crate) data_file_path: String,
+    pub(crate) information_list: Vec<String>,
     pub(crate) editing_index: Option<usize>,
 }
 
@@ -58,7 +59,7 @@ impl AkaiVisualizer {
         settings_data: &Arc<Mutex<SettingsData>>,
         gui_data: Arc<Mutex<GuiData>>,
         font_folder: &str,
-        initial_n_of_info: usize,
+        data_path: &str,
     ) -> Self {
         let fonts = vec![
             LoaderFontData {
@@ -71,13 +72,16 @@ impl AkaiVisualizer {
             },
         ];
         load_fonts(&cc.egui_ctx, fonts).expect("Font should be readable.");
+
         Self {
             gui_data,
             info_panel_data: InfoPanelData {
-                combattant_lists: (0..initial_n_of_info)
-                    .map(|i| format!("Combattant {i} | Initiative: 0"))
+                data_file_path: data_path.to_string(),
+                information_list: InformationEntry::load_from_file(data_path)
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|x| x.data.clone())
                     .collect(),
-                initial_n_of_info,
                 editing_index: None,
             },
             settings_data: settings_data
@@ -91,22 +95,12 @@ impl AkaiVisualizer {
 
 impl eframe::App for AkaiVisualizer {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        ctx.request_repaint_after(Duration::from_millis(16));
         let now = Instant::now();
-        let delta_time = self.gui_data.lock().map_or(0, |gui_data| {
-            now.duration_since(gui_data.audio_player_states.last_local_update)
-                .as_millis() as u64
-        });
-
-        if let Ok(mut gui_data) = self.gui_data.lock() {
-            gui_data.audio_player_states.last_local_update = now;
-        }
-
         let need_refresh = self.gui_data.lock().is_ok_and(|mut gui_data| {
-            if now.duration_since(gui_data.audio_player_states.last_refresh)
-                >= gui_data.audio_player_states.refresh_interval
+            if now.duration_since(gui_data.player_info.last_refresh)
+                >= gui_data.player_info.refresh_interval
             {
-                gui_data.audio_player_states.last_refresh = now;
+                gui_data.player_info.last_refresh = now;
                 true
             } else {
                 false
@@ -116,8 +110,6 @@ impl eframe::App for AkaiVisualizer {
         if need_refresh {
             self.send_command_to_backend(CommsCommand::Refresh {});
         }
-        self.update_local_progress(delta_time);
-
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.current_tab, CurrentTab::Visualizer, "Teatro core");

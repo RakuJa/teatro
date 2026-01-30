@@ -11,7 +11,6 @@ finish-args:
   # Display
   - --socket=fallback-x11
   - --socket=wayland
- # - --share=ipc
   # Network access for webview
   - --share=network
   # File system access for config files
@@ -37,7 +36,6 @@ modules:
       - install -Dm644 ui/icons/* /app/share/teatro/icons/
 
       - install -Dm644 ui/icons/teatro.png /app/share/icons/hicolor/256x256/apps/io.github.rakuja.teatro.png
-      # - install -Dm644 ui/icons/teatro.svg /app/share/icons/hicolor/scalable/apps/io.github.rakuja.teatro.svg
 
       - install -Dm644 io.github.rakuja.teatro.desktop /app/share/applications/io.github.rakuja.teatro.desktop
       - install -Dm644 io.github.rakuja.teatro.metainfo.xml /app/share/metainfo/io.github.rakuja.teatro.metainfo.xml
@@ -53,6 +51,7 @@ modules:
 
         if [ ! -f "$CONFIG_DIR/.env" ]; then
           echo "CONFIG_PATH=$CONFIG_DIR/config.toml" > "$CONFIG_DIR/.env"
+          echo "CONFIG_PATH=$CONFIG_DIR/data.json" >> "$CONFIG_DIR/.env"
         fi
 
         cd "$CONFIG_DIR"

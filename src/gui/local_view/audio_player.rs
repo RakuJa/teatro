@@ -1,4 +1,5 @@
 use crate::gui::comms::command::CommsCommand;
+use crate::gui::local_view::audio_player_states::PlayerStatus;
 use crate::gui::ui::AkaiVisualizer;
 use eframe::emath::{Pos2, Rect, Vec2};
 use eframe::epaint::{Color32, FontFamily, FontId};
@@ -10,22 +11,121 @@ fn format_time(milliseconds: u64) -> String {
     format!("{minutes:02}:{seconds:02}")
 }
 
+struct ButtonStyle {
+    size: Vec2,
+    bg_color: Color32,
+    border_color: Color32,
+    border_width: f32,
+    corner_radius: f32,
+}
+
+impl ButtonStyle {
+    fn new(scale: f32) -> Self {
+        Self {
+            size: Vec2::new(28.0 * scale, 24.0 * scale),
+            bg_color: Color32::from_rgb(60, 60, 70),
+            border_color: Color32::from_rgb(100, 100, 110),
+            border_width: 1.5 * scale,
+            corner_radius: 4.0 * scale,
+        }
+    }
+
+    const fn active_color(mut self, color: Color32) -> Self {
+        self.bg_color = color;
+        self
+    }
+
+    const fn with_size(mut self, size: Vec2) -> Self {
+        self.size = size;
+        self
+    }
+}
+
+fn draw_button(
+    ui: &egui::Ui,
+    rect: Rect,
+    style: &ButtonStyle,
+    icon: &str,
+    icon_size: f32,
+    id: &str,
+) -> egui::Response {
+    ui.painter()
+        .rect_filled(rect, style.corner_radius, style.bg_color);
+    ui.painter().rect_stroke(
+        rect,
+        style.corner_radius,
+        egui::Stroke::new(style.border_width, style.border_color),
+        egui::StrokeKind::Outside,
+    );
+    ui.painter().text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        icon,
+        FontId::proportional(icon_size),
+        Color32::from_rgb(240, 240, 250),
+    );
+
+    ui.interact(rect, ui.id().with(id), egui::Sense::click())
+}
+
+fn draw_text_with_shadow(
+    painter: &egui::Painter,
+    pos: Pos2,
+    align: egui::Align2,
+    text: &str,
+    font: FontId,
+    color: Color32,
+    shadow_offset: f32,
+) {
+    // Shadow
+    painter.text(
+        Pos2::new(pos.x + shadow_offset, pos.y + shadow_offset),
+        align,
+        text,
+        font.clone(),
+        Color32::from_rgba_premultiplied(0, 0, 0, 150),
+    );
+    painter.text(pos, align, text, font, color);
+}
+
 impl AkaiVisualizer {
     pub(crate) fn draw_audio_player(&self, ui: &egui::Ui, rect: Rect, scale: f32) {
         let player_height = 120.0 * scale;
         let margin = 15.0 * scale;
+        let content_padding = 14.0 * scale;
 
         let player_rect = Rect::from_min_size(
             Pos2::new(rect.min.x + margin, rect.max.y - player_height - margin),
             Vec2::new(rect.width() - margin * 2.0, player_height),
         );
 
+        Self::draw_player_background(ui, player_rect, scale);
+
+        let (file_path, progress, elapsed_ms, total_ms, current_status) = self.get_player_data();
+
+        self.draw_control_buttons(ui, player_rect, content_padding, scale, current_status);
+        Self::draw_track_info(
+            ui,
+            player_rect,
+            content_padding,
+            scale,
+            &file_path,
+            elapsed_ms,
+            total_ms,
+        );
+        if progress > 0.0 {
+            Self::draw_visualizer(ui, player_rect, content_padding, scale, progress);
+        }
+        Self::draw_progress_bar(ui, player_rect, content_padding, scale, progress);
+        self.draw_playback_buttons(ui, player_rect, scale, current_status);
+    }
+
+    fn draw_player_background(ui: &egui::Ui, player_rect: Rect, scale: f32) {
         ui.painter()
             .rect_filled(player_rect, 10.0 * scale, Color32::from_rgb(18, 18, 22));
 
-        let glow_rect1 = player_rect.shrink(1.5 * scale);
         ui.painter().rect_stroke(
-            glow_rect1,
+            player_rect.shrink(1.5 * scale),
             9.0 * scale,
             egui::Stroke::new(
                 3.0 * scale,
@@ -34,9 +134,8 @@ impl AkaiVisualizer {
             egui::StrokeKind::Inside,
         );
 
-        let glow_rect2 = player_rect.shrink(3.0 * scale);
         ui.painter().rect_stroke(
-            glow_rect2,
+            player_rect.shrink(3.0 * scale),
             8.0 * scale,
             egui::Stroke::new(
                 1.5 * scale,
@@ -44,31 +143,19 @@ impl AkaiVisualizer {
             ),
             egui::StrokeKind::Inside,
         );
+    }
 
-        let (
-            file_path,
-            progress,
-            elapsed_ms,
-            total_ms,
-            is_shuffled,
-            _is_looped,
-            is_muted,
-            is_paused,
-            is_solo,
-            is_stop_all,
-        ) = if let Ok(gui_data) = self.gui_data.lock()
+    fn get_player_data(&self) -> (String, f32, u64, u64, PlayerStatus) {
+        if let Ok(gui_data) = self.gui_data.lock()
             && let Some(playlist) = gui_data.data.current_playlist.clone()
         {
             let track = playlist.tracks[playlist.current_track as usize].clone();
             let track_length = track.track_length;
 
-            let is_pause_on = gui_data.audio_player_states.pause_on;
-            let is_stop_all_on = gui_data.audio_player_states.stop_all_on;
-
-            let prog = if is_pause_on || is_stop_all_on {
+            let prog = if gui_data.player_info.status.is_music_playable() {
                 0.0
             } else if track_length > 0 {
-                (gui_data.audio_player_states.local_elapsed as f32 / ((track_length * 1000) as f32))
+                (gui_data.player_info.local_elapsed as f32 / ((track_length * 1000) as f32))
                     .clamp(0.0, 1.0)
             } else {
                 0.0
@@ -76,208 +163,117 @@ impl AkaiVisualizer {
             (
                 track.file_path,
                 prog,
-                gui_data.audio_player_states.local_elapsed,
+                gui_data.player_info.local_elapsed,
                 track_length * 1000,
-                gui_data.audio_player_states.shuffle_on,
-                gui_data.audio_player_states.loop_on,
-                gui_data.audio_player_states.mute_on,
-                is_pause_on,
-                gui_data.audio_player_states.solo_on,
-                is_stop_all_on,
+                gui_data.player_info.status,
             )
         } else {
-            (
-                String::new(),
-                0.0,
-                0,
-                0,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-            )
-        };
+            (String::new(), 0.0, 0, 0, PlayerStatus::default())
+        }
+    }
 
-        let content_padding = 14.0 * scale;
-
+    fn draw_control_buttons(
+        &self,
+        ui: &egui::Ui,
+        player_rect: Rect,
+        content_padding: f32,
+        scale: f32,
+        current_status: PlayerStatus,
+    ) {
         let button_size = Vec2::new(28.0 * scale, 24.0 * scale);
         let button_spacing = 8.0 * scale;
         let buttons_y = content_padding + player_rect.min.y;
         let buttons_start_x = player_rect.min.x + content_padding;
 
-        let shuffle_rect = Rect::from_min_size(Pos2::new(buttons_start_x, buttons_y), button_size);
-
-        let shuffle_color = if is_shuffled {
-            Color32::from_rgb(180, 100, 220)
-        } else {
-            Color32::from_rgb(60, 60, 70)
-        };
-
-        ui.painter()
-            .rect_filled(shuffle_rect, 4.0 * scale, shuffle_color);
-        ui.painter().rect_stroke(
-            shuffle_rect,
-            4.0 * scale,
-            egui::Stroke::new(1.5 * scale, Color32::from_rgb(100, 100, 110)),
-            egui::StrokeKind::Outside,
-        );
-        ui.painter().text(
-            shuffle_rect.center(),
-            egui::Align2::CENTER_CENTER,
-            "🔀",
-            FontId::proportional(12.0 * scale),
-            Color32::from_rgb(240, 240, 250),
-        );
-
-        let shuffle_response = ui.interact(
-            shuffle_rect,
-            ui.id().with("shuffle_btn"),
-            egui::Sense::click(),
-        );
-        if shuffle_response.clicked() {
-            if let Ok(mut x) = self.gui_data.lock() {
-                x.audio_player_states.shuffle_on = !x.audio_player_states.shuffle_on;
-            }
-            self.send_command_to_backend(CommsCommand::ShufflePressed {});
-        }
-
-        let mute_rect = Rect::from_min_size(
-            Pos2::new(buttons_start_x + button_size.x + button_spacing, buttons_y),
-            button_size,
-        );
-
-        let mute_color = if is_muted {
-            Color32::from_rgb(200, 80, 80)
-        } else {
-            Color32::from_rgb(60, 60, 70)
-        };
-
-        ui.painter().rect_filled(mute_rect, 4.0 * scale, mute_color);
-        ui.painter().rect_stroke(
-            mute_rect,
-            4.0 * scale,
-            egui::Stroke::new(1.5 * scale, Color32::from_rgb(100, 100, 110)),
-            egui::StrokeKind::Outside,
-        );
-
-        let mute_icon = if is_muted { "🔇" } else { "🔊" };
-        ui.painter().text(
-            mute_rect.center(),
-            egui::Align2::CENTER_CENTER,
-            mute_icon,
-            FontId::proportional(12.0 * scale),
-            Color32::from_rgb(240, 240, 250),
-        );
-
-        let mute_response = ui.interact(mute_rect, ui.id().with("mute_btn"), egui::Sense::click());
-        if mute_response.clicked() {
-            if let Ok(mut x) = self.gui_data.lock() {
-                x.audio_player_states.mute_on = !x.audio_player_states.mute_on;
-            }
-            self.send_command_to_backend(CommsCommand::MutePressed {});
-        }
-
-        let solo_rect = Rect::from_min_size(
-            Pos2::new(
-                (button_size.x + button_spacing).mul_add(2.0, buttons_start_x),
-                buttons_y,
+        let buttons = [
+            (
+                "shuffle",
+                "🔀",
+                current_status.is_shuffle_requested(),
+                Color32::from_rgb(180, 100, 220),
+                PlayerStatus::SHUFFLE,
+                CommsCommand::ShufflePressed {},
             ),
-            button_size,
-        );
-
-        let solo_color = if is_solo {
-            Color32::from_rgb(100, 180, 220)
-        } else {
-            Color32::from_rgb(60, 60, 70)
-        };
-
-        ui.painter().rect_filled(solo_rect, 4.0 * scale, solo_color);
-        ui.painter().rect_stroke(
-            solo_rect,
-            4.0 * scale,
-            egui::Stroke::new(1.5 * scale, Color32::from_rgb(100, 100, 110)),
-            egui::StrokeKind::Outside,
-        );
-        ui.painter().text(
-            solo_rect.center(),
-            egui::Align2::CENTER_CENTER,
-            "S",
-            FontId::proportional(14.0 * scale),
-            Color32::from_rgb(240, 240, 250),
-        );
-
-        let solo_response = ui.interact(solo_rect, ui.id().with("solo_btn"), egui::Sense::click());
-        if solo_response.clicked() {
-            if let Ok(mut x) = self.gui_data.lock() {
-                x.audio_player_states.solo_on = !x.audio_player_states.solo_on;
-            }
-            self.send_command_to_backend(CommsCommand::SoloPressed {});
-        }
-
-        let stop_all_rect = Rect::from_min_size(
-            Pos2::new(
-                (button_size.x + button_spacing).mul_add(3.0, buttons_start_x),
-                buttons_y,
+            (
+                "mute",
+                if current_status.is_music_muted() {
+                    "🔇"
+                } else {
+                    "🔊"
+                },
+                current_status.is_music_muted(),
+                Color32::from_rgb(200, 80, 80),
+                PlayerStatus::MUTE_ALL,
+                CommsCommand::MutePressed {},
             ),
-            button_size,
-        );
+            (
+                "solo",
+                "S",
+                current_status.is_sound_muted(),
+                Color32::from_rgb(100, 180, 220),
+                PlayerStatus::SOLO_MUSIC,
+                CommsCommand::SoloPressed {},
+            ),
+            (
+                "stop_all",
+                "⏹",
+                current_status.is_everything_stopped(),
+                Color32::from_rgb(220, 80, 80),
+                PlayerStatus::STOP_ALL,
+                CommsCommand::StopAllPressed {},
+            ),
+        ];
 
-        let stop_all_color = if is_stop_all {
-            Color32::from_rgb(220, 80, 80)
-        } else {
-            Color32::from_rgb(60, 60, 70)
-        };
+        for (i, (id, icon, is_active, active_color, status_flag, command)) in
+            buttons.iter().enumerate()
+        {
+            let x = (button_size.x + button_spacing).mul_add(i as f32, buttons_start_x);
+            let rect = Rect::from_min_size(Pos2::new(x, buttons_y), button_size);
 
-        ui.painter()
-            .rect_filled(stop_all_rect, 4.0 * scale, stop_all_color);
-        ui.painter().rect_stroke(
-            stop_all_rect,
-            4.0 * scale,
-            egui::Stroke::new(1.5 * scale, Color32::from_rgb(100, 100, 110)),
-            egui::StrokeKind::Outside,
-        );
-        ui.painter().text(
-            stop_all_rect.center(),
-            egui::Align2::CENTER_CENTER,
-            "⏹",
-            FontId::proportional(14.0 * scale),
-            Color32::from_rgb(240, 240, 250),
-        );
+            let style = ButtonStyle::new(scale).active_color(if *is_active {
+                *active_color
+            } else {
+                Color32::from_rgb(60, 60, 70)
+            });
 
-        let stop_all_response = ui.interact(
-            stop_all_rect,
-            ui.id().with("stop_all_btn"),
-            egui::Sense::click(),
-        );
-        if stop_all_response.clicked() {
-            if let Ok(mut x) = self.gui_data.lock() {
-                x.audio_player_states.stop_all_on = !x.audio_player_states.stop_all_on;
+            let icon_size = if *id == "solo" { 14.0 } else { 12.0 } * scale;
+            let response = draw_button(ui, rect, &style, icon, icon_size, id);
+
+            if response.clicked()
+                && matches!(
+                    self.gui_data
+                        .lock()
+                        .map(|mut x| x.player_info.status.toggle(*status_flag)),
+                    Ok(())
+                )
+            {
+                self.send_command_to_backend(*command);
             }
-            self.send_command_to_backend(CommsCommand::StopAllPressed {});
         }
+    }
 
-        let title = std::path::Path::new(&file_path)
+    // Track title and time display
+    fn draw_track_info(
+        ui: &egui::Ui,
+        player_rect: Rect,
+        content_padding: f32,
+        scale: f32,
+        file_path: &str,
+        elapsed_ms: u64,
+        total_ms: u64,
+    ) {
+        let button_size = Vec2::new(28.0 * scale, 24.0 * scale);
+        let buttons_y = content_padding + player_rect.min.y;
+        let title_y = 8.0f32.mul_add(scale, buttons_y + button_size.y);
+
+        let title = std::path::Path::new(file_path)
             .file_stem()
             .and_then(|n| n.to_str())
             .unwrap_or("No Track Playing")
             .to_string();
 
-        let title_y = 8.0f32.mul_add(scale, buttons_y + button_size.y);
-
-        ui.painter().text(
-            Pos2::new(content_padding + player_rect.min.x + scale, title_y + scale),
-            egui::Align2::LEFT_TOP,
-            &title,
-            FontId {
-                size: 17.0 * scale,
-                family: FontFamily::Name("Pixelify".into()),
-            },
-            Color32::from_rgba_premultiplied(0, 0, 0, 150),
-        );
-
-        ui.painter().text(
+        draw_text_with_shadow(
+            ui.painter(),
             Pos2::new(content_padding + player_rect.min.x, title_y),
             egui::Align2::LEFT_TOP,
             &title,
@@ -286,10 +282,10 @@ impl AkaiVisualizer {
                 family: FontFamily::Name("Pixelify".into()),
             },
             Color32::from_rgb(245, 245, 250),
+            scale,
         );
 
         let time_text = format!("{} / {}", format_time(elapsed_ms), format_time(total_ms));
-
         ui.painter().text(
             Pos2::new(player_rect.max.x - content_padding, title_y),
             egui::Align2::RIGHT_TOP,
@@ -300,73 +296,91 @@ impl AkaiVisualizer {
             },
             Color32::from_rgb(200, 160, 220),
         );
+    }
 
-        if progress > 0.0 {
-            let wave_height = 20.0 * scale;
-            let wave_y = 32.0f32.mul_add(
+    // Waveform visualizer
+    fn draw_visualizer(
+        ui: &egui::Ui,
+        player_rect: Rect,
+        content_padding: f32,
+        scale: f32,
+        progress: f32,
+    ) {
+        let wave_height = 20.0 * scale;
+        let wave_y = 32.0f32.mul_add(
+            -scale,
+            8.0f32.mul_add(
                 -scale,
-                8.0f32.mul_add(
-                    -scale,
-                    12.0f32.mul_add(-scale, player_rect.max.y - content_padding),
-                ) - wave_height,
+                12.0f32.mul_add(-scale, player_rect.max.y - content_padding),
+            ),
+        ) - wave_height;
+        let num_bars = 50;
+        let bar_width =
+            (content_padding.mul_add(-2.0, player_rect.width()) / num_bars as f32) * 0.75;
+        let wave_x_start = player_rect.min.x + content_padding;
+
+        for i in 0..num_bars {
+            let x = wave_x_start
+                + (i as f32 * content_padding.mul_add(-2.0, player_rect.width()) / num_bars as f32);
+            let height_factor = (i as f32)
+                .mul_add(0.4, progress * 12.0)
+                .sin()
+                .mul_add(0.5, 0.5)
+                .mul_add(0.7, 0.3);
+            let bar_height = wave_height * height_factor;
+            let opacity = if (i as f32 / num_bars as f32) <= progress {
+                140
+            } else {
+                35
+            };
+
+            let wave_rect = Rect::from_min_size(
+                Pos2::new(x, wave_y + wave_height - bar_height),
+                Vec2::new(bar_width, bar_height),
             );
-            let num_bars = 50;
-            let bar_width =
-                ((player_rect.width() - content_padding * 2.0) / num_bars as f32) * 0.75;
-            let wave_x_start = player_rect.min.x + content_padding;
 
-            for i in 0..num_bars {
-                let x = wave_x_start
-                    + (i as f32 * (player_rect.width() - content_padding * 2.0) / num_bars as f32);
+            ui.painter().rect_filled(
+                wave_rect,
+                1.5 * scale,
+                Color32::from_rgba_premultiplied(180, 100, 220, opacity),
+            );
 
-                let height_factor = (i as f32)
-                    .mul_add(0.4, progress * 12.0)
-                    .sin()
-                    .mul_add(0.5, 0.5)
-                    .mul_add(0.7, 0.3);
-                let bar_height = wave_height * height_factor;
-
-                let opacity = if (i as f32 / num_bars as f32) <= progress {
-                    140
-                } else {
-                    35
-                };
-
-                let wave_rect = Rect::from_min_size(
-                    Pos2::new(x, wave_y + wave_height - bar_height),
-                    Vec2::new(bar_width, bar_height),
-                );
-
+            if opacity > 100 {
+                let highlight =
+                    Rect::from_min_size(wave_rect.min, Vec2::new(bar_width, bar_height * 0.3));
                 ui.painter().rect_filled(
-                    wave_rect,
+                    highlight,
                     1.5 * scale,
-                    Color32::from_rgba_premultiplied(180, 100, 220, opacity),
+                    Color32::from_rgba_premultiplied(220, 160, 255, opacity / 2),
                 );
-
-                if opacity > 100 {
-                    let highlight =
-                        Rect::from_min_size(wave_rect.min, Vec2::new(bar_width, bar_height * 0.3));
-                    ui.painter().rect_filled(
-                        highlight,
-                        1.5 * scale,
-                        Color32::from_rgba_premultiplied(220, 160, 255, opacity / 2),
-                    );
-                }
             }
         }
+    }
 
-        let bar_margin = content_padding;
+    // Progress bar with indicator
+    fn draw_progress_bar(
+        ui: &egui::Ui,
+        player_rect: Rect,
+        content_padding: f32,
+        scale: f32,
+        progress: f32,
+    ) {
         let bar_height = 12.0 * scale;
-        let bar_y = player_rect.max.y - bar_margin - bar_height;
+        let bar_y = player_rect.max.y - content_padding - bar_height;
 
         let bar_rect = Rect::from_min_size(
-            Pos2::new(player_rect.min.x + bar_margin, bar_y),
-            Vec2::new(player_rect.width() - bar_margin * 2.0, bar_height),
+            Pos2::new(player_rect.min.x + content_padding, bar_y),
+            Vec2::new(
+                content_padding.mul_add(-2.0, player_rect.width()),
+                bar_height,
+            ),
         );
 
+        // Background
         ui.painter()
             .rect_filled(bar_rect, 6.0 * scale, Color32::from_rgb(35, 35, 45));
 
+        // Shadow
         let shadow_rect =
             Rect::from_min_size(bar_rect.min, Vec2::new(bar_rect.width(), 3.0 * scale));
         ui.painter().rect_filled(
@@ -375,6 +389,7 @@ impl AkaiVisualizer {
             Color32::from_rgba_premultiplied(0, 0, 0, 100),
         );
 
+        // Border
         ui.painter().rect_stroke(
             bar_rect,
             6.0 * scale,
@@ -387,9 +402,11 @@ impl AkaiVisualizer {
             let filled_rect =
                 Rect::from_min_size(bar_rect.min, Vec2::new(filled_width, bar_rect.height()));
 
+            // Filled portion
             ui.painter()
                 .rect_filled(filled_rect, 6.0 * scale, Color32::from_rgb(150, 70, 190));
 
+            // Highlight
             let highlight_rect = Rect::from_min_size(
                 filled_rect.min,
                 Vec2::new(filled_rect.width(), filled_rect.height() * 0.45),
@@ -400,6 +417,7 @@ impl AkaiVisualizer {
                 Color32::from_rgba_premultiplied(210, 140, 255, 100),
             );
 
+            // Glow
             ui.painter().rect_stroke(
                 filled_rect.expand(0.5 * scale),
                 6.5 * scale,
@@ -410,101 +428,100 @@ impl AkaiVisualizer {
                 egui::StrokeKind::Outside,
             );
 
-            let indicator_radius = 7.0 * scale;
-            let indicator_pos = Pos2::new(filled_rect.max.x, bar_rect.center().y);
-
-            ui.painter().circle_filled(
-                indicator_pos,
-                4.0f32.mul_add(scale, indicator_radius),
-                Color32::from_rgba_premultiplied(200, 120, 240, 40),
-            );
-
-            ui.painter().circle_filled(
-                indicator_pos,
-                2.5f32.mul_add(scale, indicator_radius),
-                Color32::from_rgba_premultiplied(190, 110, 230, 80),
-            );
-
-            ui.painter().circle_filled(
-                indicator_pos,
-                indicator_radius,
-                Color32::from_rgb(230, 180, 255),
-            );
-
-            ui.painter().circle_filled(
-                Pos2::new(
-                    1.5f32.mul_add(-scale, indicator_pos.x),
-                    1.5f32.mul_add(-scale, indicator_pos.y),
-                ),
-                indicator_radius * 0.5,
-                Color32::from_rgba_premultiplied(255, 255, 255, 200),
-            );
+            // Position indicator
+            Self::draw_position_indicator(ui, filled_rect.max.x, bar_rect.center().y, scale);
         }
+    }
 
-        let bottom_button_size = Vec2::new(32.0 * scale, 32.0 * scale);
-        let bottom_buttons_y = bottom_button_size.y.mul_add(-0.5, bar_y) + bar_height * 0.5;
+    // Position indicator dot
+    fn draw_position_indicator(ui: &egui::Ui, x: f32, y: f32, scale: f32) {
+        let indicator_radius = 7.0 * scale;
+        let pos = Pos2::new(x, y);
+
+        // Outer glow layers
+        ui.painter().circle_filled(
+            pos,
+            4.0f32.mul_add(scale, indicator_radius),
+            Color32::from_rgba_premultiplied(200, 120, 240, 40),
+        );
+        ui.painter().circle_filled(
+            pos,
+            2.5f32.mul_add(scale, indicator_radius),
+            Color32::from_rgba_premultiplied(190, 110, 230, 80),
+        );
+
+        // Main circle
+        ui.painter()
+            .circle_filled(pos, indicator_radius, Color32::from_rgb(230, 180, 255));
+
+        // Highlight
+        ui.painter().circle_filled(
+            Pos2::new(1.5f32.mul_add(-scale, pos.x), 1.5f32.mul_add(-scale, pos.y)),
+            indicator_radius * 0.5,
+            Color32::from_rgba_premultiplied(255, 255, 255, 200),
+        );
+    }
+
+    // Playback buttons (pause, skip)
+    fn draw_playback_buttons(
+        &self,
+        ui: &egui::Ui,
+        player_rect: Rect,
+        scale: f32,
+        current_status: PlayerStatus,
+    ) {
+        let button_size = Vec2::new(32.0 * scale, 32.0 * scale);
+        let bar_height = 12.0 * scale;
+        let content_padding = 14.0 * scale;
+        let bar_y = player_rect.max.y - content_padding - bar_height;
+        let buttons_y = bar_y - button_size.y / 2.0 + bar_height / 2.0;
         let center_x = player_rect.center().x;
 
+        let style = ButtonStyle::new(scale).with_size(button_size);
+
+        // Pause button
         let pause_rect = Rect::from_center_size(
             Pos2::new(
-                4.0f32.mul_add(-scale, bottom_button_size.x.mul_add(-0.5, center_x)),
-                bottom_button_size.y.mul_add(0.5, bottom_buttons_y),
+                4.0f32.mul_add(-scale, center_x - button_size.x / 2.0),
+                buttons_y + button_size.y / 2.0,
             ),
-            bottom_button_size,
+            button_size,
         );
-
-        ui.painter()
-            .rect_filled(pause_rect, 4.0 * scale, Color32::from_rgb(60, 60, 70));
-        ui.painter().rect_stroke(
+        let pause_icon = if current_status.is_music_paused() {
+            "▶"
+        } else {
+            "⏸"
+        };
+        let pause_response = draw_button(
+            ui,
             pause_rect,
-            4.0 * scale,
-            egui::Stroke::new(1.5 * scale, Color32::from_rgb(100, 100, 110)),
-            egui::StrokeKind::Outside,
-        );
-
-        let pause_icon = if is_paused { "▶" } else { "⏸" };
-        ui.painter().text(
-            pause_rect.center(),
-            egui::Align2::CENTER_CENTER,
+            &style,
             pause_icon,
-            FontId::proportional(16.0 * scale),
-            Color32::from_rgb(240, 240, 250),
+            16.0 * scale,
+            "pause_btn",
         );
 
-        let pause_response =
-            ui.interact(pause_rect, ui.id().with("pause_btn"), egui::Sense::click());
-        if pause_response.clicked() {
-            if let Ok(mut x) = self.gui_data.lock() {
-                x.audio_player_states.pause_on = !x.audio_player_states.pause_on;
-            }
+        if pause_response.clicked()
+            && matches!(
+                self.gui_data
+                    .lock()
+                    .map(|mut x| x.player_info.status.toggle(PlayerStatus::PAUSE_MUSIC)),
+                Ok(())
+            )
+        {
             self.send_command_to_backend(CommsCommand::PausePressed {});
         }
 
+        // Skip button
         let skip_rect = Rect::from_center_size(
             Pos2::new(
-                4.0f32.mul_add(scale, bottom_button_size.x.mul_add(0.5, center_x)),
-                bottom_button_size.y.mul_add(0.5, bottom_buttons_y),
+                4.0f32.mul_add(scale, center_x + button_size.x / 2.0),
+                buttons_y + button_size.y / 2.0,
             ),
-            bottom_button_size,
+            button_size,
         );
+        let skip_response = draw_button(ui, skip_rect, &style, "⏭", 16.0 * scale, "skip_btn");
 
-        ui.painter()
-            .rect_filled(skip_rect, 4.0 * scale, Color32::from_rgb(60, 60, 70));
-        ui.painter().rect_stroke(
-            skip_rect,
-            4.0 * scale,
-            egui::Stroke::new(1.5 * scale, Color32::from_rgb(100, 100, 110)),
-            egui::StrokeKind::Outside,
-        );
-        ui.painter().text(
-            skip_rect.center(),
-            egui::Align2::CENTER_CENTER,
-            "⏭",
-            FontId::proportional(16.0 * scale),
-            Color32::from_rgb(240, 240, 250),
-        );
-
-        let skip_response = ui.interact(skip_rect, ui.id().with("skip_btn"), egui::Sense::click());
         if skip_response.clicked() {
             self.send_command_to_backend(CommsCommand::SkipTrackPressed {});
         }

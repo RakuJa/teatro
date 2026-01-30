@@ -1,5 +1,5 @@
+use crate::gui::local_view::audio_player_states::PlayerStatus;
 use crate::gui::ui::GuiData;
-use crate::states::button_states::ToggleStates;
 use crate::states::playlist_data::PlaylistData;
 use crate::states::visualizer::RuntimeData;
 use flume::Receiver;
@@ -14,19 +14,12 @@ pub fn sync_gui_with_data_received_from_backend(
         if let Ok(x) = rx_data.recv() {
             if let Ok(mut visualizer) = akai_visualizer.lock() {
                 debug!("{x:?}");
-                visualizer.audio_player_states.local_elapsed = x
+                visualizer.player_info.local_elapsed = x
                     .current_playlist
                     .as_ref()
                     .and_then(PlaylistData::get_current_track)
                     .map_or(0, |t| t.elapsed_seconds * 1000);
-                visualizer.audio_player_states.mute_on =
-                    x.button_states.contains(ToggleStates::MUTE);
-                visualizer.audio_player_states.shuffle_on =
-                    x.button_states.contains(ToggleStates::SEND);
-                visualizer.audio_player_states.loop_on =
-                    x.button_states.contains(ToggleStates::SELECT);
-                visualizer.audio_player_states.pause_on =
-                    x.button_states.contains(ToggleStates::CLIP_STOP);
+                visualizer.player_info.status = PlayerStatus::from(x.button_states);
                 visualizer.data = x;
             } else {
                 warn!("Couldn't update GUI data. GUI will not update.");

@@ -7,10 +7,10 @@ bitflags! {
     pub struct ToggleStates: u16 {
         const CLIP_STOP = 1 << 0;
         const SOLO      = 1 << 1;
-        const MUTE      = 1 << 2; // mutes sound music
+        const MUTE      = 1 << 2;
         const REC_ARM   = 1 << 3;
-        const SELECT    = 1 << 4; // used to shuffle playlist
-        const STOP_ALL  = 1 << 5; // stops music and
+        const SELECT    = 1 << 4;
+        const STOP_ALL  = 1 << 5;
         const VOLUME    = 1 << 6;
         const PAN       = 1 << 7;
         const SEND      = 1 << 8;

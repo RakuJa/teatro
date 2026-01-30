@@ -5,6 +5,7 @@ use crate::gui::ui::{AkaiVisualizer, GuiData};
 use crate::states::settings_data::SettingsData;
 use crate::states::visualizer::RuntimeData;
 use flume::{Receiver, Sender};
+use log::debug;
 use std::env;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -26,10 +27,6 @@ pub fn gui_initializer(
         ..Default::default()
     };
 
-    let n_of_i = env::var("INITIAL_N_OF_INFO")
-        .unwrap_or_else(|_| "10".to_string())
-        .parse::<usize>()
-        .expect("INITIAL_N_OF_INFO should be a positive number");
     let gui_data = GuiData::new(backend_data, tx_command, watchdog_tx);
 
     let icon_path = format!(
@@ -37,14 +34,17 @@ pub fn gui_initializer(
         env::var("ICON_PATH").unwrap_or_else(|_| "ui/icons".to_string()),
         "teatro.png"
     );
-    if let Ok(icon_bytes) = std::fs::read(icon_path)
+    if let Ok(icon_bytes) = std::fs::read(&icon_path)
         && let Ok(d) = eframe::icon_data::from_png_bytes(&icon_bytes)
     {
+        debug!("Loaded icon {icon_path}");
         options.viewport.icon = Some(Arc::new(d));
     }
 
     let arc_gui_data = Arc::new(Mutex::new(gui_data));
     let gui_data_sync = arc_gui_data.clone();
+
+    let data_path = env::var("DATA_PATH").unwrap_or_else(|_| "data.json".to_string());
     eframe::run_native(
         "Teatro - Akai APC Key 25 Controller",
         options,
@@ -63,7 +63,7 @@ pub fn gui_initializer(
                 &settings,
                 arc_gui_data,
                 &font_folder,
-                n_of_i,
+                &data_path,
             )));
             std::thread::spawn(move || {
                 sync_gui_with_data_received_from_backend(&rx_data, &gui_data_sync);

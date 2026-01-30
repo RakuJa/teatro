@@ -1,6 +1,6 @@
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
-use std::{env, fs};
+use std::fs;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SettingsData {
@@ -26,11 +26,7 @@ impl SettingsData {
         self.sound_effect_folder
             .clone_from(&new_data.sound_effect_folder);
     }
-    pub fn write_to_config(&self, path: Option<&str>) -> anyhow::Result<()> {
-        let config_path = path.map_or_else(
-            || env::var("CONFIG_PATH").unwrap_or_else(|_| "config.yml".to_string()),
-            ToString::to_string,
-        );
+    pub fn write_to_config(&self, config_path: &str) -> anyhow::Result<()> {
         let toml_string = toml::to_string(self)?;
         if matches!(fs::write(config_path, toml_string), Ok(())) {
             bail!("Failed to write settings file");

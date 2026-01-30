@@ -75,6 +75,7 @@ tao = { version = "0.34.5", optional = true }
 
 # watchdog folder for changes
 hotwatch = { version = "0.5.0", optional = true }
+serde_json = "1.0.149"
 [features]
 default = ["gui", "bybe", "midi"]
 gui = ["dep:egui", "dep:eframe", "dep:egui_font_loader", "dep:hotwatch"]

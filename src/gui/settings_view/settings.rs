@@ -3,6 +3,7 @@ use crate::gui::ui::AkaiVisualizer;
 use crate::states::settings_data::SettingsData;
 use log::{debug, warn};
 use rfd::FileDialog;
+use std::env;
 use std::path::PathBuf;
 
 fn music_dir() -> anyhow::Result<PathBuf> {
@@ -32,7 +33,8 @@ fn get_default_file_dialog() -> FileDialog {
 
 impl AkaiVisualizer {
     fn save_settings(&mut self, settings_data: SettingsData) {
-        if let Err(e) = settings_data.write_to_config(None) {
+        let config_path = env::var("CONFIG_PATH").unwrap_or_else(|_| "config.yml".to_string());
+        if let Err(e) = settings_data.write_to_config(&config_path) {
             warn!("Failed to save settings {e:?}");
         } else {
             self.settings_data = settings_data;
