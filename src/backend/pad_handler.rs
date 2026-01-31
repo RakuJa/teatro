@@ -2,7 +2,7 @@ use crate::MusicState;
 use crate::audio::playback_handler;
 use crate::backend::hw_handler::MidiHandler;
 use crate::os_explorer::explorer::{
-    get_album_name_from_folder_in_path, map_to_indexed_vec, search_files_in_path,
+    files_in_nth_subdir, get_album_name_from_folder_in_path, map_to_indexed_vec,
 };
 use crate::states::audio_sinks::AudioSinks;
 use crate::states::button_states::ToggleStates;
@@ -225,13 +225,12 @@ impl PadHandler {
         if let Ok(mut data) = state.data.lock() {
             let old_pad = data.last_pad_pressed;
             data.last_pad_pressed = Some(note);
-            let prefix = format!("{note:02}_");
-            if let Ok(res) = search_files_in_path(
+            if let Ok(res) = files_in_nth_subdir(
                 data.settings_data
                     .lock()
                     .map_or_else(|_| "music".to_string(), |x| x.music_folder.clone())
                     .as_ref(),
-                prefix.as_str(),
+                note as usize,
             ) {
                 info!("playing the following audio folder: {}", res.0.display());
                 let mut files = res

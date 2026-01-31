@@ -1,5 +1,5 @@
 use crate::backend::hw_handler::MidiHandler;
-use crate::os_explorer::explorer::find_file_with_prefix;
+use crate::os_explorer::explorer::get_all_files_in_folder;
 use crate::states::audio_sinks::AudioSinks;
 use crate::states::sound_state::SoundState;
 use crate::states::visualizer::RuntimeData;
@@ -9,6 +9,7 @@ use log::{debug, warn};
 use ramidier::enums::input_group::KeyboardInputGroup;
 use ramidier::io::input_data::MidiInputData;
 use ramidier::io::output::ChannelOutput;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 const fn is_ambience_key(k: u8) -> bool {
@@ -127,8 +128,9 @@ impl KeyboardHandler {
                 data.get_ambience_volume(),
             )
         };
-        let prefix = format!("{index:02}_");
-        if let Some(file_path) = find_file_with_prefix(&folder, &prefix) {
+        if let Ok(file_path) = get_all_files_in_folder(&PathBuf::from(&folder))
+            && let Some(file_path) = file_path.get((index - 1) as usize)
+        {
             if let Some(file_str) = file_path.to_str() {
                 let queue = if is_ambience_key(key) {
                     &audio_sinks.ambience_queue

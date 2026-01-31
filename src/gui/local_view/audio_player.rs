@@ -148,8 +148,8 @@ impl AkaiVisualizer {
     fn get_player_data(&self) -> (String, f32, u64, u64, PlayerStatus) {
         if let Ok(gui_data) = self.gui_data.lock()
             && let Some(playlist) = gui_data.data.current_playlist.clone()
+            && let Some(track) = playlist.tracks.get(playlist.current_track as usize)
         {
-            let track = playlist.tracks[playlist.current_track as usize].clone();
             let track_length = track.track_length;
 
             let prog = if gui_data.player_info.status.is_music_playable() {
@@ -161,7 +161,7 @@ impl AkaiVisualizer {
                 0.0
             };
             (
-                track.file_path,
+                track.file_path.clone(),
                 prog,
                 gui_data.player_info.local_elapsed,
                 track_length * 1000,

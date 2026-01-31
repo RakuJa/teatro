@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
+use std::fs;
 use std::io::Write;
-use std::{env, fs};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct InformationEntry {
@@ -21,8 +21,4 @@ impl InformationEntry {
         let data: Vec<Self> = serde_json::from_str(&contents).expect("Deserialization failed");
         Ok(data)
     }
-}
-
-fn default_path() -> String {
-    env::var("DATA_PATH").unwrap_or_else(|_| "data.json".to_string())
 }

@@ -1,4 +1,5 @@
 use anyhow::bail;
+use log::debug;
 use serde::{Deserialize, Serialize};
 use std::fs;
 
@@ -28,9 +29,10 @@ impl SettingsData {
     }
     pub fn write_to_config(&self, config_path: &str) -> anyhow::Result<()> {
         let toml_string = toml::to_string(self)?;
-        if matches!(fs::write(config_path, toml_string), Ok(())) {
-            bail!("Failed to write settings file");
+        if let Err(e) = fs::write(config_path, &toml_string) {
+            bail!("Failed to write settings file: {e}");
         }
+        debug!("Settings file has been written");
         Ok(())
     }
 
