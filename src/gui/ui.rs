@@ -4,6 +4,7 @@ use crate::states::information_data::InformationEntry;
 use crate::states::settings_data::SettingsData;
 use crate::states::visualizer::RuntimeData;
 use eframe::egui;
+use egui::Ui;
 use egui_font_loader::{LoaderFontData, load_fonts};
 use flume::Sender;
 use log::warn;
@@ -94,6 +95,8 @@ impl AkaiVisualizer {
 }
 
 impl eframe::App for AkaiVisualizer {
+    fn ui(&mut self, _: &mut Ui, _: &mut eframe::Frame) {}
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let now = Instant::now();
         let need_refresh = self.gui_data.lock().is_ok_and(|mut gui_data| {
