@@ -9,11 +9,9 @@ pub struct GuiWrapper {
 }
 
 impl eframe::App for GuiWrapper {
-    fn ui(&mut self, _: &mut Ui, _: &mut eframe::Frame) {}
-
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn ui(&mut self, ctx: &mut Ui, frame: &mut eframe::Frame) {
         if let Ok(mut state) = self.state.lock() {
-            state.update(ctx, frame);
+            state.ui(ctx, frame);
         }
         ctx.request_repaint();
     }

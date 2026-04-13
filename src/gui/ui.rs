@@ -95,9 +95,7 @@ impl AkaiVisualizer {
 }
 
 impl eframe::App for AkaiVisualizer {
-    fn ui(&mut self, _: &mut Ui, _: &mut eframe::Frame) {}
-
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ctx: &mut Ui, _: &mut eframe::Frame) {
         let now = Instant::now();
         let need_refresh = self.gui_data.lock().is_ok_and(|mut gui_data| {
             if now.duration_since(gui_data.player_info.last_refresh)
@@ -113,7 +111,7 @@ impl eframe::App for AkaiVisualizer {
         if need_refresh {
             self.send_command_to_backend(CommsCommand::Refresh {});
         }
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show_inside(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.current_tab, CurrentTab::Visualizer, "Teatro core");
                 #[cfg(feature = "bybe")]

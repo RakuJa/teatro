@@ -50,7 +50,7 @@ pub fn gui_initializer(
         options,
         Box::new(move |cc| {
             let ctx = &cc.egui_ctx;
-            ctx.style_mut(|style| {
+            ctx.global_style_mut(|style| {
                 style.animation_time = 0.08;
             });
             ctx.options_mut(|o| {
