@@ -1,6 +1,6 @@
 use biquad::{Biquad, DirectForm1};
 use log::warn;
-use rodio::Source;
+use rodio::{ChannelCount, SampleRate, Source};
 use std::sync::{Arc, Mutex};
 
 pub struct FilteredSource<S> {
@@ -32,10 +32,10 @@ where
     fn current_span_len(&self) -> Option<usize> {
         self.source.current_span_len()
     }
-    fn channels(&self) -> u16 {
+    fn channels(&self) -> ChannelCount {
         self.source.channels()
     }
-    fn sample_rate(&self) -> u32 {
+    fn sample_rate(&self) -> SampleRate {
         self.source.sample_rate()
     }
     fn total_duration(&self) -> Option<std::time::Duration> {

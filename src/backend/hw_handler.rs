@@ -7,7 +7,7 @@ use flume::Sender;
 use log::warn;
 use ramidier::io::input_data::MidiInputData;
 use ramidier::io::output::ChannelOutput;
-use rodio::Sink;
+use rodio::Player;
 use std::sync::{Arc, Mutex};
 
 pub trait MidiHandler {
@@ -28,7 +28,7 @@ pub trait MidiHandler {
         }
     }
 
-    fn get_current_playlist_state(old_state: PlaylistData, sink: &Sink) -> PlaylistData {
+    fn get_current_playlist_state(old_state: PlaylistData, sink: &Player) -> PlaylistData {
         let curr_track_number =
             old_state.tracks.len() as u64 - playback_handler::get_n_of_remaining_tracks(sink);
         PlaylistData {
@@ -52,7 +52,7 @@ pub trait MidiHandler {
 
     fn play_song(
         files: &[String],
-        sound_queue: &Sink,
+        sound_queue: &Player,
         filter: &Arc<Mutex<FilterData>>,
         volume: Option<f32>,
     ) -> Option<PlaylistData> {

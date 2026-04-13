@@ -21,7 +21,7 @@ use gui::comms::command::CommsCommand;
 use log::warn;
 use ramidier::io::input::InputChannel;
 use ramidier::io::output::ChannelOutput;
-use rodio::Sink;
+use rodio::Player;
 use std::env;
 use std::sync::{Arc, Mutex};
 
@@ -64,11 +64,11 @@ fn main() {
     let (gui_command_tx, gui_command_rx) = flume::unbounded::<CommsCommand>();
     let (watchgod_tx, watchdog_rx) = flume::unbounded::<CommsCommand>();
 
-    let stream_handle = rodio::OutputStreamBuilder::open_default_stream()
+    let stream_handle = rodio::DeviceSinkBuilder::open_default_sink()
         .expect("Audio stream should be writable and readable");
-    let music_queue = Sink::connect_new(stream_handle.mixer());
-    let ambience_queue = Sink::connect_new(stream_handle.mixer());
-    let sound_effect_queue = Sink::connect_new(stream_handle.mixer());
+    let music_queue = Player::connect_new(stream_handle.mixer());
+    let ambience_queue = Player::connect_new(stream_handle.mixer());
+    let sound_effect_queue = Player::connect_new(stream_handle.mixer());
 
     let states = prepare_audio_states(
         music_queue,
@@ -161,9 +161,9 @@ fn get_base_filter_data(coeffs: Coefficients<f32>) -> FilterData {
 }
 
 fn prepare_audio_states(
-    music_queue: Sink,
-    ambience_queue: Sink,
-    sound_effect_queue: Sink,
+    music_queue: Player,
+    ambience_queue: Player,
+    sound_effect_queue: Player,
     data: Arc<Mutex<RuntimeData>>,
     tx_data: &Sender<RuntimeData>,
 ) -> (MusicState, SoundState) {
@@ -173,11 +173,12 @@ fn prepare_audio_states(
         sound_effect_queue,
     }));
 
-    let sample_rate = 44100.0;
+    //let sample_rate = 44100.0;
+    let sample_rate = 10.0;
     let coeffs = Coefficients::<f32>::from_params(
         Type::AllPass,
         sample_rate.hz(),
-        44100.hz(),
+        1.hz(),
         Q_BUTTERWORTH_F32,
     )
     .expect("Could not create coeffs to initialize filters");

@@ -3,7 +3,7 @@ use crate::audio::audio_filter::FilteredSource;
 use crate::states::playlist_data::Track;
 use biquad::{Coefficients, DirectForm1, Q_BUTTERWORTH_F32, ToHertz, Type};
 use log::warn;
-use rodio::{Sink, Source};
+use rodio::{Player, Source};
 use std::error::Error;
 use std::sync::{Arc, Mutex};
 
@@ -44,17 +44,17 @@ pub fn change_filter_frequency_value(
     }
 }
 
-pub fn change_volume(sink: &Sink, value: f32) -> f32 {
+pub fn change_volume(sink: &Player, value: f32) -> f32 {
     sink.set_volume(if value <= 0. { 0. } else { value.min(1.) });
     sink.volume()
 }
 
-pub fn increase_volume(sink: &Sink, value: f32) -> f32 {
+pub fn increase_volume(sink: &Player, value: f32) -> f32 {
     change_volume(sink, sink.volume() + value)
 }
 
 pub fn add_track_to_queue(
-    sink: &Sink,
+    sink: &Player,
     file_path: &str,
     play: bool,
 ) -> Result<Track, Box<dyn Error>> {
@@ -71,20 +71,20 @@ pub fn add_track_to_queue(
         .build())
 }
 
-pub fn stop_track(sink: &Sink) {
+pub fn stop_track(sink: &Player) {
     sink.stop();
 }
 
-pub fn pause_track(sink: &Sink) {
+pub fn pause_track(sink: &Player) {
     sink.pause();
 }
 
-pub fn resume_track(sink: &Sink) {
+pub fn resume_track(sink: &Player) {
     sink.play();
 }
 
 pub fn play_track(
-    sink: &Sink,
+    sink: &Player,
     file_path: &str,
     filter: Option<&Arc<Mutex<FilterData>>>,
 ) -> Result<Track, Box<dyn Error>> {
@@ -112,10 +112,10 @@ pub fn play_track(
         .build())
 }
 
-pub fn get_n_of_remaining_tracks(sink: &Sink) -> u64 {
+pub fn get_n_of_remaining_tracks(sink: &Player) -> u64 {
     sink.len() as u64
 }
 
-pub fn get_current_track_elapsed_time(sink: &Sink) -> u64 {
+pub fn get_current_track_elapsed_time(sink: &Player) -> u64 {
     sink.get_pos().as_secs()
 }

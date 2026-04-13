@@ -1,7 +1,7 @@
-use rodio::Sink;
+use rodio::Player;
 
 pub struct AudioSinks {
-    pub music_queue: Sink,
-    pub ambience_queue: Sink,
-    pub sound_effect_queue: Sink,
+    pub music_queue: Player,
+    pub ambience_queue: Player,
+    pub sound_effect_queue: Player,
 }

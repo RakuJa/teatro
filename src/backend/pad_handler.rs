@@ -20,7 +20,7 @@ use ramidier::enums::led_light::color::LedColor;
 use ramidier::enums::led_light::mode::LedMode;
 use ramidier::io::input_data::MidiInputData;
 use ramidier::io::output::ChannelOutput;
-use rodio::Sink;
+use rodio::Player;
 use std::sync::{Arc, Mutex};
 
 const KNOB_INCREMENT: f32 = 0.005;
@@ -438,7 +438,7 @@ impl PadHandler {
 
 fn adjust_queue_volume(
     state: &MusicState,
-    queue_selector: impl FnOnce(&AudioSinks) -> &Sink,
+    queue_selector: impl FnOnce(&AudioSinks) -> &Player,
     delta: f32,
 ) {
     match state.audio_sinks.lock() {
