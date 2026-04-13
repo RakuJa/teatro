@@ -11,7 +11,6 @@ use crate::states::knob_value_update::KnobValueUpdate;
 use crate::states::visualizer::RuntimeData;
 use biquad::Type;
 use flume::Sender;
-use log::{debug, info, warn};
 use ramidier::enums::button::knob_ctrl::KnobCtrlKey;
 use ramidier::enums::button::pads::PadKey;
 use ramidier::enums::button::soft_keys::SoftKey;
@@ -22,6 +21,7 @@ use ramidier::io::input_data::MidiInputData;
 use ramidier::io::output::ChannelOutput;
 use rodio::Player;
 use std::sync::{Arc, Mutex};
+use tracing::{debug, info, warn};
 
 const KNOB_INCREMENT: f32 = 0.005;
 
@@ -441,12 +441,9 @@ fn adjust_queue_volume(
     queue_selector: impl FnOnce(&AudioSinks) -> &Player,
     delta: f32,
 ) {
-    match state.audio_sinks.lock() {
-        Ok(audio_sinks) => {
-            playback_handler::increase_volume(queue_selector(&audio_sinks), delta * KNOB_INCREMENT);
-        }
-        Err(_) => warn!("Failed to get audio sink lock, could not change volume"),
-    }
+    if let Ok(audio_sinks) = state.audio_sinks.lock() {
+        playback_handler::increase_volume(queue_selector(&audio_sinks), delta * KNOB_INCREMENT);
+    } else { warn!("Failed to get audio sink lock, could not change volume") }
 }
 
 fn adjust_filter(filter: &Arc<Mutex<FilterData>>, delta: f32, filter_type: Type<f32>) {

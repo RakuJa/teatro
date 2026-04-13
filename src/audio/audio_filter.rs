@@ -1,7 +1,7 @@
 use biquad::{Biquad, DirectForm1};
-use log::warn;
 use rodio::{ChannelCount, SampleRate, Source};
 use std::sync::{Arc, Mutex};
+use tracing::warn;
 
 pub struct FilteredSource<S> {
     pub(crate) source: S,

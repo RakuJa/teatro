@@ -4,7 +4,6 @@ use crate::backend::pad_handler::PadHandler;
 use crate::states::music_state::MusicState;
 use crate::states::sound_state::SoundState;
 use crate::{MidiInputChannels, MidiOutputChannels};
-use log::debug;
 use ramidier::enums::input_group::{KeyboardChannel, PadsAndKnobsChannel};
 use ramidier::enums::led_light::color::LedColor;
 use ramidier::enums::led_light::mode::LedMode;
@@ -14,6 +13,7 @@ use ramidier::io::output::ChannelOutput;
 use std::error::Error;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use tracing::debug;
 
 pub fn prepare_midi_channels() -> Result<(MidiInputChannels, MidiOutputChannels), Box<dyn Error>> {
     let midi_in_keyboard = InputChannel::builder()

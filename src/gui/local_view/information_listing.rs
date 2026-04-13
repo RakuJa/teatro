@@ -3,7 +3,7 @@ use crate::states::information_data::InformationEntry;
 use eframe::emath::Rect;
 use eframe::epaint::Color32;
 use egui::{Frame, Pos2, RichText, ScrollArea, Vec2};
-use log::warn;
+use tracing::warn;
 
 struct IconButtonStyle {
     size: Vec2,

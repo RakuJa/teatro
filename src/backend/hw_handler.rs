@@ -4,11 +4,11 @@ use crate::states::audio_sinks::AudioSinks;
 use crate::states::playlist_data::{PlaylistData, Track};
 use crate::states::visualizer::RuntimeData;
 use flume::Sender;
-use log::warn;
 use ramidier::io::input_data::MidiInputData;
 use ramidier::io::output::ChannelOutput;
 use rodio::Player;
 use std::sync::{Arc, Mutex};
+use tracing::warn;
 
 pub trait MidiHandler {
     type Group;
@@ -22,10 +22,7 @@ pub trait MidiHandler {
     ) -> RuntimeData;
 
     fn update_gui(tx_channel: &Sender<RuntimeData>, data: &RuntimeData) {
-        match tx_channel.send(data.clone()) {
-            Ok(()) => (),
-            _ => warn!("Failed to send data to update GUI"),
-        }
+        if matches!(tx_channel.send(data.clone()), Ok(())) {  } else { warn!("Failed to send data to update GUI") }
     }
 
     fn get_current_playlist_state(old_state: PlaylistData, sink: &Player) -> PlaylistData {

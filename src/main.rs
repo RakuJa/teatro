@@ -16,14 +16,19 @@ use crate::states::sound_state::SoundState;
 use crate::states::visualizer::RuntimeData;
 use biquad::{Coefficients, DirectForm1, Q_BUTTERWORTH_F32, ToHertz, Type};
 use dotenvy::dotenv;
+use egui_tracing::tracing::collector::EventCollector;
+use egui_tracing::tracing_subscriber::layer::SubscriberExt;
+use egui_tracing::tracing_subscriber::util::SubscriberInitExt;
+use egui_tracing::tracing_subscriber;
 use flume::Sender;
 use gui::comms::command::CommsCommand;
-use log::warn;
 use ramidier::io::input::InputChannel;
 use ramidier::io::output::ChannelOutput;
 use rodio::Player;
 use std::env;
 use std::sync::{Arc, Mutex};
+use tracing::Level;
+use tracing::warn;
 
 #[derive(Clone)]
 pub struct MidiOutputChannels {
@@ -38,7 +43,13 @@ pub struct MidiInputChannels {
 
 fn main() {
     dotenv().ok();
-    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+
+    let event_collector = EventCollector::default()
+        .with_max_events(None)
+        .with_max_level(Level::INFO);
+    tracing_subscriber::registry()
+        .with(event_collector.clone())
+        .init();
 
     let config_path = env::var("CONFIG_PATH").unwrap_or_else(|_| "config.yml".to_string());
 
@@ -147,6 +158,7 @@ fn main() {
             gui_command_tx,
             rx_data,
             watchgod_tx,
+            event_collector,
         )
         .expect("Application did not complete run correctly");
     }

@@ -7,11 +7,11 @@ use crate::states::music_state::MusicState;
 use crate::states::sound_state::SoundState;
 use crate::states::visualizer::RuntimeData;
 use flume::{Receiver, Sender};
-use log::{debug, warn};
 use ramidier::enums::button::knob_ctrl::KnobCtrlKey;
 use ramidier::enums::button::pads::PadKey;
 use ramidier::enums::button::soft_keys::SoftKey;
 use ramidier::enums::input_group::{KeyboardInputGroup, PadsAndKnobsInputGroup};
+use tracing::{debug, warn};
 
 pub fn handle_gui_command_and_relay_them_to_backend(
     rx_command: &Receiver<CommsCommand>,

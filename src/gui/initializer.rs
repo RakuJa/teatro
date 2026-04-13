@@ -4,11 +4,12 @@ use crate::gui::gui_wrapper::GuiWrapper;
 use crate::gui::ui::{AkaiVisualizer, GuiData};
 use crate::states::settings_data::SettingsData;
 use crate::states::visualizer::RuntimeData;
+use egui_tracing::EventCollector;
 use flume::{Receiver, Sender};
-use log::debug;
 use std::env;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
+use tracing::debug;
 
 pub fn gui_initializer(
     backend_data: RuntimeData,
@@ -16,6 +17,7 @@ pub fn gui_initializer(
     tx_command: Sender<CommsCommand>,
     rx_data: Receiver<RuntimeData>,
     watchdog_tx: Sender<CommsCommand>,
+    event_collector: EventCollector,
 ) -> eframe::Result {
     let font_folder = env::var("FONT_FOLDER").unwrap_or_else(|_| "ui/fonts".to_string());
 
@@ -64,6 +66,7 @@ pub fn gui_initializer(
                 arc_gui_data,
                 &font_folder,
                 &data_path,
+                event_collector,
             )));
             std::thread::spawn(move || {
                 sync_gui_with_data_received_from_backend(&rx_data, &gui_data_sync);

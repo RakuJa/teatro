@@ -3,8 +3,8 @@ use crate::gui::ui::GuiData;
 use crate::states::playlist_data::PlaylistData;
 use crate::states::visualizer::RuntimeData;
 use flume::Receiver;
-use log::{debug, warn};
 use std::sync::{Arc, Mutex};
+use tracing::{debug, warn};
 
 pub fn sync_gui_with_data_received_from_backend(
     rx_data: &Receiver<RuntimeData>,

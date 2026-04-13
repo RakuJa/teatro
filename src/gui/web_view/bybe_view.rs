@@ -1,6 +1,5 @@
 use crate::gui::ui::AkaiVisualizer;
 use egui::{Color32, RichText};
-use log::{debug, info, warn};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use tao::{
@@ -8,6 +7,7 @@ use tao::{
     event_loop::{ControlFlow, EventLoopBuilder},
     window::WindowBuilder,
 };
+use tracing::{debug, info, warn};
 use wry::WebViewBuilder;
 
 // Global flag to track if a webview window is currently open

@@ -6,16 +6,18 @@ use crate::states::visualizer::RuntimeData;
 use eframe::egui;
 use egui::Ui;
 use egui_font_loader::{LoaderFontData, load_fonts};
+use egui_tracing::EventCollector;
 use flume::Sender;
-use log::warn;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
+use tracing::warn;
 
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum CurrentTab {
     Visualizer,
     WebView,
     Settings,
+    LogViewer,
 }
 
 pub struct GuiData {
@@ -46,6 +48,7 @@ pub struct AkaiVisualizer {
     pub(crate) settings_data: SettingsData,
     pub(crate) current_tab: CurrentTab,
     pub(crate) webview_error: Option<String>,
+    pub(crate) event_collector: EventCollector,
 }
 
 pub struct InfoPanelData {
@@ -61,6 +64,7 @@ impl AkaiVisualizer {
         gui_data: Arc<Mutex<GuiData>>,
         font_folder: &str,
         data_path: &str,
+        event_collector: EventCollector,
     ) -> Self {
         let fonts = vec![
             LoaderFontData {
@@ -90,6 +94,7 @@ impl AkaiVisualizer {
                 .map_or_else(|_| SettingsData::default(), |s| s.clone()),
             current_tab: CurrentTab::Visualizer,
             webview_error: None,
+            event_collector,
         }
     }
 }
@@ -123,6 +128,7 @@ impl eframe::App for AkaiVisualizer {
                     );
                 };
                 ui.selectable_value(&mut self.current_tab, CurrentTab::Settings, "Settings");
+                ui.selectable_value(&mut self.current_tab, CurrentTab::LogViewer, "Log viewer");
             });
             ui.separator();
 
@@ -135,12 +141,21 @@ impl eframe::App for AkaiVisualizer {
                     }
                 }
                 CurrentTab::Settings => self.render_settings_tab(ui),
+                CurrentTab::LogViewer => self.render_logviewer_tab(ui),
             }
         });
     }
 }
 
 impl AkaiVisualizer {
+    fn render_logviewer_tab(&self, ui: &mut Ui) {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
+            ui.add(
+                egui_tracing::Logs::new(self.event_collector.clone()), //.with_labels(self.labels.clone()),
+            );
+        });
+    }
+
     pub fn send_command_to_backend(&self, command: CommsCommand) {
         if let Ok(gui_data) = self.gui_data.lock() {
             Self::send_command(&gui_data.tx_to_backend, command);

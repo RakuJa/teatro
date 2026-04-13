@@ -1,10 +1,10 @@
 use crate::gui::comms::command::CommsCommand;
 use crate::gui::ui::AkaiVisualizer;
 use crate::states::settings_data::SettingsData;
-use log::{debug, warn};
 use rfd::FileDialog;
 use std::env;
 use std::path::PathBuf;
+use tracing::{debug, warn};
 
 fn music_dir() -> anyhow::Result<PathBuf> {
     let output = std::process::Command::new("xdg-user-dir")

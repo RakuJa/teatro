@@ -5,12 +5,12 @@ use crate::states::sound_state::SoundState;
 use crate::states::visualizer::RuntimeData;
 use anyhow::bail;
 use flume::Sender;
-use log::{debug, warn};
 use ramidier::enums::input_group::KeyboardInputGroup;
 use ramidier::io::input_data::MidiInputData;
 use ramidier::io::output::ChannelOutput;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use tracing::{debug, warn};
 
 const fn is_ambience_key(k: u8) -> bool {
     matches!(k, 2 | 4 | 7 | 9 | 11 | 14 | 16 | 19 | 21 | 23)

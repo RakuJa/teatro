@@ -5,8 +5,8 @@ use crate::states::settings_data::SettingsData;
 use crate::states::visualizer::RuntimeData;
 use flume::{Receiver, Sender};
 use hotwatch::{Event, EventKind, Hotwatch};
-use log::warn;
 use std::sync::{Arc, Mutex};
+use tracing::warn;
 
 fn update_pads(music_state: &MusicState, tx_data: &Sender<RuntimeData>) {
     if let Ok(mut data) = music_state.data.lock()

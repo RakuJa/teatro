@@ -1,7 +1,7 @@
 use anyhow::bail;
-use log::debug;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use tracing::debug;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SettingsData {
