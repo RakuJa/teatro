@@ -52,24 +52,24 @@ pub fn handle_watchdog(
     );
 
     loop {
-        if let Ok(command) = rx_command.recv() {
-            if matches!(command, CommsCommand::Refresh) {
-                if let Err(e) = hotwatch.unwatch(&last_folder) {
-                    warn!("Error while unwatching folder: {e}");
-                } else if let Ok(s) = settings_data.lock() {
-                    last_folder.clone_from(&s.music_folder);
-                }
-                m_state_watchdog = music_state.clone();
-                tx_data_watchdog = tx_data.clone();
-
-                update_pads(music_state, tx_data);
-                observe_folder(
-                    &mut hotwatch,
-                    &last_folder,
-                    m_state_watchdog,
-                    tx_data_watchdog,
-                );
+        if let Ok(command) = rx_command.recv()
+            && matches!(command, CommsCommand::Refresh)
+        {
+            if let Err(e) = hotwatch.unwatch(&last_folder) {
+                warn!("Error while unwatching folder: {e}");
+            } else if let Ok(s) = settings_data.lock() {
+                last_folder.clone_from(&s.music_folder);
             }
+            m_state_watchdog = music_state.clone();
+            tx_data_watchdog = tx_data.clone();
+
+            update_pads(music_state, tx_data);
+            observe_folder(
+                &mut hotwatch,
+                &last_folder,
+                m_state_watchdog,
+                tx_data_watchdog,
+            );
         }
     }
 }

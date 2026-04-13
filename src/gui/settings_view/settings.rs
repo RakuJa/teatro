@@ -49,10 +49,10 @@ impl AkaiVisualizer {
             ui.horizontal(|ui| {
                 ui.label("Music folder:");
                 ui.text_edit_singleline(&mut self.settings_data.music_folder);
-                if ui.button("Browse...").clicked() {
-                    if let Some(path) = get_default_file_dialog().pick_folder() {
-                        self.settings_data.music_folder = path.display().to_string();
-                    }
+                if ui.button("Browse...").clicked()
+                    && let Some(path) = get_default_file_dialog().pick_folder()
+                {
+                    self.settings_data.music_folder = path.display().to_string();
                 }
             });
 
@@ -61,10 +61,10 @@ impl AkaiVisualizer {
             ui.horizontal(|ui| {
                 ui.label("Ambience folder:");
                 ui.text_edit_singleline(&mut self.settings_data.ambience_folder);
-                if ui.button("Browse...").clicked() {
-                    if let Some(path) = get_default_file_dialog().pick_folder() {
-                        self.settings_data.ambience_folder = path.display().to_string();
-                    }
+                if ui.button("Browse...").clicked()
+                    && let Some(path) = get_default_file_dialog().pick_folder()
+                {
+                    self.settings_data.ambience_folder = path.display().to_string();
                 }
             });
 
@@ -73,10 +73,10 @@ impl AkaiVisualizer {
             ui.horizontal(|ui| {
                 ui.label("Sound effect folder:");
                 ui.text_edit_singleline(&mut self.settings_data.sound_effect_folder);
-                if ui.button("Browse...").clicked() {
-                    if let Some(path) = get_default_file_dialog().pick_folder() {
-                        self.settings_data.sound_effect_folder = path.display().to_string();
-                    }
+                if ui.button("Browse...").clicked()
+                    && let Some(path) = get_default_file_dialog().pick_folder()
+                {
+                    self.settings_data.sound_effect_folder = path.display().to_string();
                 }
             });
 

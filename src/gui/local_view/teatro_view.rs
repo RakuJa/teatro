@@ -71,27 +71,6 @@ impl AkaiVisualizer {
             }),
         );
     }
-    pub(crate) fn update_local_progress(&self, delta_time_ms: u64) {
-        if let Ok(mut gui_data) = self.gui_data.lock()
-            && gui_data.player_info.status.is_music_playable()
-            && let Some(ref playlist) = gui_data.data.current_playlist
-        {
-            let current_track_index = playlist.current_track;
-            if let Some(track) = playlist.tracks.get(current_track_index as usize) {
-                let new_elapsed = gui_data
-                    .player_info
-                    .local_elapsed
-                    .saturating_add(delta_time_ms);
-                if track.track_length > 0 {
-                    gui_data.player_info.local_elapsed = new_elapsed.min(track.track_length * 1000);
-                } else {
-                    gui_data.player_info.local_elapsed = new_elapsed;
-                }
-            } else {
-                gui_data.player_info.local_elapsed = 0;
-            }
-        }
-    }
 
     fn draw_pads(&self, ui: &mut egui::Ui, rect: Rect, scale: f32) {
         let pad_size = 50.0 * scale;

@@ -86,12 +86,11 @@ impl KeyboardHandler {
     pub fn handle_input(input_group: KeyboardInputGroup, state: &SoundState) {
         match input_group {
             KeyboardInputGroup::Key(k) => {
-                if let Ok(data) = state.data.lock() {
-                    if let Ok(audio_sinks) = state.audio_sinks.lock() {
-                        if let Err(e) = Self::play_sound_file(k, &data, &audio_sinks, state) {
-                            warn!("Error while trying to play sound file: {e}");
-                        }
-                    }
+                if let Ok(data) = state.data.lock()
+                    && let Ok(audio_sinks) = state.audio_sinks.lock()
+                    && let Err(e) = Self::play_sound_file(k, &data, &audio_sinks, state)
+                {
+                    warn!("Error while trying to play sound file: {e}");
                 }
             }
         }
