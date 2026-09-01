@@ -22,7 +22,10 @@ pub trait MidiHandler {
     ) -> RuntimeData;
 
     fn update_gui(tx_channel: &Sender<RuntimeData>, data: &RuntimeData) {
-        if matches!(tx_channel.send(data.clone()), Ok(())) {  } else { warn!("Failed to send data to update GUI") }
+        if matches!(tx_channel.send(data.clone()), Ok(())) {
+        } else {
+            warn!("Failed to send data to update GUI")
+        }
     }
 
     fn get_current_playlist_state(old_state: PlaylistData, sink: &Player) -> PlaylistData {

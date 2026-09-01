@@ -34,11 +34,11 @@ pub fn change_filter_frequency_value(
                 warn!("Failed to get FilterData, cannot change filter frequency");
             }
         } else {
-            warn!(
-                "Failed to get coeffs to change filter value, cannot change filter frequency"
-            );
+            warn!("Failed to get coeffs to change filter value, cannot change filter frequency");
         }
-    } else { warn!("Failed to get filter data lock, cannot change filter frequency") }
+    } else {
+        warn!("Failed to get filter data lock, cannot change filter frequency")
+    }
 }
 
 pub fn change_volume(sink: &Player, value: f32) -> f32 {
@@ -92,10 +92,14 @@ pub fn play_track(
     let source = rodio::Decoder::try_from(file)?;
     let track_length = source.total_duration();
     if let Some(filter) = filter {
-        if let Ok(f) = filter.lock() { sink.append(FilteredSource {
-            source,
-            filter: Arc::clone(&f.filter),
-        }); } else { warn!("Failed to get filter lock, will not apply filter") }
+        if let Ok(f) = filter.lock() {
+            sink.append(FilteredSource {
+                source,
+                filter: Arc::clone(&f.filter),
+            });
+        } else {
+            warn!("Failed to get filter lock, will not apply filter")
+        }
     } else {
         sink.append(source);
     }

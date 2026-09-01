@@ -296,7 +296,7 @@ impl PadHandler {
             }
             if !data.button_states.contains(ToggleStates::MUTE) {
                 data.knob_values.entry(index).and_modify(|v| {
-                    *v += delta * KNOB_INCREMENT;
+                    *v = delta.mul_add(KNOB_INCREMENT, *v);
                     *v = v.clamp(0.0, 1.0);
                 });
             }
@@ -443,7 +443,9 @@ fn adjust_queue_volume(
 ) {
     if let Ok(audio_sinks) = state.audio_sinks.lock() {
         playback_handler::increase_volume(queue_selector(&audio_sinks), delta * KNOB_INCREMENT);
-    } else { warn!("Failed to get audio sink lock, could not change volume") }
+    } else {
+        warn!("Failed to get audio sink lock, could not change volume")
+    }
 }
 
 fn adjust_filter(filter: &Arc<Mutex<FilterData>>, delta: f32, filter_type: Type<f32>) {
