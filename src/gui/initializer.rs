@@ -60,6 +60,13 @@ pub fn gui_initializer(
                     o.max_passes = x;
                 }
             });
+
+            #[cfg(feature = "profiling")]
+            {
+                use puffin_egui::puffin;
+                puffin::set_scopes_on(true);
+            }
+
             let state = Rc::new(Mutex::new(AkaiVisualizer::new(
                 cc,
                 &settings,

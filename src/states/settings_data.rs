@@ -1,4 +1,5 @@
 use anyhow::bail;
+use display_info::DisplayInfo;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use tracing::debug;
@@ -8,16 +9,31 @@ pub struct SettingsData {
     pub(crate) music_folder: String,
     pub(crate) ambience_folder: String,
     pub(crate) sound_effect_folder: String,
+    pub(crate) detected_display_hz: f32,
+    pub(crate) repaint_display_hz: f32,
 }
 
 impl Default for SettingsData {
     fn default() -> Self {
+        let display_hz = detect_refresh_rate();
         Self {
             music_folder: "music".to_string(),
             ambience_folder: "ambience".to_string(),
             sound_effect_folder: "sound".to_string(),
+            detected_display_hz: display_hz,
+            repaint_display_hz: display_hz,
         }
     }
+}
+
+fn detect_refresh_rate() -> f32 {
+    DisplayInfo::all().map_or(60.0, |displays| {
+        displays
+            .iter()
+            .find(|d| d.is_primary)
+            .or_else(|| displays.first())
+            .map_or(60., |d| d.frequency)
+    })
 }
 
 impl SettingsData {

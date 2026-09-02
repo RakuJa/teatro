@@ -42,6 +42,8 @@ impl AkaiVisualizer {
     }
 
     pub fn render_settings_tab(&mut self, ui: &mut egui::Ui) {
+        #[cfg(feature = "profiling")]
+        puffin_egui::puffin::profile_function!();
         ui.vertical(|ui| {
             ui.heading("Settings");
             ui.add_space(10.0);
@@ -77,6 +79,22 @@ impl AkaiVisualizer {
                     && let Some(path) = get_default_file_dialog().pick_folder()
                 {
                     self.settings_data.sound_effect_folder = path.display().to_string();
+                }
+            });
+
+            ui.add_space(5.0);
+
+            ui.horizontal(|ui| {
+                ui.label(format!(
+                    "App refresh rate (detected:{} Hz):",
+                    self.settings_data.detected_display_hz
+                ));
+                let mut current_hz = self.settings_data.repaint_display_hz;
+                if ui
+                    .add(egui::Slider::new(&mut current_hz, 1.0..=500.).suffix(" Hz"))
+                    .changed()
+                {
+                    self.settings_data.repaint_display_hz = current_hz;
                 }
             });
 

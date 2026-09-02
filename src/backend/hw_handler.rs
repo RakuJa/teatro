@@ -24,7 +24,7 @@ pub trait MidiHandler {
     fn update_gui(tx_channel: &Sender<RuntimeData>, data: &RuntimeData) {
         if matches!(tx_channel.send(data.clone()), Ok(())) {
         } else {
-            warn!("Failed to send data to update GUI")
+            warn!("Failed to send data to update GUI");
         }
     }
 

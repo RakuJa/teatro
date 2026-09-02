@@ -101,6 +101,8 @@ impl AkaiVisualizer {
 
 impl eframe::App for AkaiVisualizer {
     fn ui(&mut self, ctx: &mut Ui, _: &mut eframe::Frame) {
+        #[cfg(feature = "profiling")]
+        puffin_egui::puffin::profile_function!();
         let now = Instant::now();
         let need_refresh = self.gui_data.lock().is_ok_and(|mut gui_data| {
             if now.duration_since(gui_data.player_info.last_refresh)
@@ -116,7 +118,7 @@ impl eframe::App for AkaiVisualizer {
         if need_refresh {
             self.send_command_to_backend(CommsCommand::Refresh {});
         }
-        egui::CentralPanel::default().show_inside(ctx, |ui| {
+        egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.current_tab, CurrentTab::Visualizer, "Teatro core");
                 #[cfg(feature = "bybe")]
@@ -149,7 +151,9 @@ impl eframe::App for AkaiVisualizer {
 
 impl AkaiVisualizer {
     fn render_logviewer_tab(&self, ui: &mut Ui) {
-        egui::CentralPanel::default().show_inside(ui, |ui| {
+        #[cfg(feature = "profiling")]
+        puffin_egui::puffin::profile_function!();
+        egui::CentralPanel::default().show(ui, |ui| {
             ui.add(
                 egui_tracing::Logs::new(self.event_collector.clone()), //.with_labels(self.labels.clone()),
             );

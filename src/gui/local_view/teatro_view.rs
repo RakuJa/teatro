@@ -7,6 +7,8 @@ use egui::RichText;
 
 impl AkaiVisualizer {
     pub(crate) fn render_visualizer_tab(&mut self, ui: &mut egui::Ui) {
+        #[cfg(feature = "profiling")]
+        puffin_egui::puffin::profile_function!();
         ui.heading(
             RichText::new("Code By RakuJa")
                 .color(Color32::from_rgb(102, 0, 51))

@@ -444,7 +444,7 @@ fn adjust_queue_volume(
     if let Ok(audio_sinks) = state.audio_sinks.lock() {
         playback_handler::increase_volume(queue_selector(&audio_sinks), delta * KNOB_INCREMENT);
     } else {
-        warn!("Failed to get audio sink lock, could not change volume")
+        warn!("Failed to get audio sink lock, could not change volume");
     }
 }
 

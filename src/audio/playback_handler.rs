@@ -37,7 +37,7 @@ pub fn change_filter_frequency_value(
             warn!("Failed to get coeffs to change filter value, cannot change filter frequency");
         }
     } else {
-        warn!("Failed to get filter data lock, cannot change filter frequency")
+        warn!("Failed to get filter data lock, cannot change filter frequency");
     }
 }
 
@@ -98,7 +98,7 @@ pub fn play_track(
                 filter: Arc::clone(&f.filter),
             });
         } else {
-            warn!("Failed to get filter lock, will not apply filter")
+            warn!("Failed to get filter lock, will not apply filter");
         }
     } else {
         sink.append(source);

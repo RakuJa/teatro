@@ -67,6 +67,8 @@ flume = "0.12.0"
 eframe = { version = "0.36.1", optional = true }
 egui = { version = "0.36.1", optional = true }
 egui_font_loader = { version = "0.36.1", optional = true }
+display-info = "0.5.9"
+puffin_egui = {git = "https://github.com/EmbarkStudios/puffin", rev = "911e9ef", optional = true}
 
 # Log
 #egui_tracing = "0.3.0" waiting for published update
@@ -86,6 +88,7 @@ default = ["gui", "bybe", "midi"]
 gui = ["dep:egui", "dep:eframe", "dep:egui_font_loader", "dep:hotwatch"]
 bybe = ["dep:wry",  "dep:tao", "gui"]
 midi = []
+profiling = ["dep:puffin_egui", "gui"]
 
 [profile.release]
 opt-level = 3
