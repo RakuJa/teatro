@@ -4,11 +4,91 @@ use eframe::emath::{Pos2, Rect, Vec2};
 use eframe::epaint::Color32;
 use std::time::Duration;
 
+/// Standard bar height.
+pub const BAR_HEIGHT: f32 = 12.0;
+
+pub mod palette {
+    use eframe::epaint::Color32;
+
+    pub const BUTTON_IDLE: Color32 = Color32::from_rgb(44, 44, 54);
+    pub const BUTTON_HOVER: Color32 = Color32::from_rgb(58, 58, 70);
+    pub const BUTTON_PRESSED: Color32 = Color32::from_rgb(36, 36, 44);
+    pub const ICON_IDLE: Color32 = Color32::from_rgb(185, 185, 195);
+    pub const ICON_HOVER: Color32 = Color32::from_rgb(235, 235, 242);
+
+    pub const PRIMARY: Color32 = Color32::from_rgb(88, 156, 255);
+    pub const PRIMARY_HOVER: Color32 = Color32::from_rgb(120, 178, 255);
+    pub const PRIMARY_PRESSED: Color32 = Color32::from_rgb(66, 128, 220);
+    pub const ON_PRIMARY: Color32 = Color32::from_rgb(15, 20, 30);
+
+    pub const SHUFFLE: Color32 = Color32::from_rgb(180, 100, 220);
+    pub const MUTE: Color32 = Color32::from_rgb(220, 90, 90);
+    pub const SOLO: Color32 = Color32::from_rgb(100, 180, 220);
+    pub const STOP: Color32 = Color32::from_rgb(230, 100, 80);
+}
+
+pub struct PlayerLayout {
+    scale: f32,
+    toggle_size: Vec2,
+    toggle_gap: f32,
+    pub(crate) play_diameter: f32,
+    pub(crate) skip_diameter: f32,
+    pub(crate) transport_gap: f32,
+    bar_height: f32,
+    bar_gap: f32,
+}
+
+impl PlayerLayout {
+    pub(crate) fn new(scale: f32) -> Self {
+        Self {
+            scale,
+            toggle_size: Vec2::new(30.0 * scale, 26.0 * scale),
+            toggle_gap: 8.0 * scale,
+            play_diameter: 40.0 * scale,
+            skip_diameter: 30.0 * scale,
+            transport_gap: 14.0 * scale,
+            bar_height: BAR_HEIGHT * scale,
+            bar_gap: 12.0 * scale,
+        }
+    }
+
+    pub(crate) fn required_height(&self, content_padding: f32) -> f32 {
+        let info_height = 36.0 * self.scale;
+        content_padding
+            + self.toggle_size.y
+            + info_height
+            + self.play_diameter
+            + self.bar_gap
+            + self.bar_height
+            + content_padding
+    }
+
+    pub(crate) fn toggle_rect(
+        &self,
+        player_rect: Rect,
+        content_padding: f32,
+        index: usize,
+    ) -> Rect {
+        let x = (self.toggle_size.x + self.toggle_gap)
+            .mul_add(index as f32, player_rect.min.x + content_padding);
+        let y = player_rect.min.y + content_padding;
+        Rect::from_min_size(Pos2::new(x, y), self.toggle_size)
+    }
+
+    pub(crate) fn transport_center_y(&self, player_rect: Rect, content_padding: f32) -> f32 {
+        player_rect.max.y
+            - content_padding
+            - self.bar_height
+            - self.bar_gap
+            - self.play_diameter / 2.0
+    }
+}
+
 impl AkaiVisualizer {
     pub(crate) fn draw_audio_player(&self, ui: &egui::Ui, rect: Rect, scale: f32) {
-        let player_height = 120.0 * scale;
         let margin = 15.0 * scale;
         let content_padding = 14.0 * scale;
+        let player_height = Self::player_height(content_padding, scale);
 
         let player_rect = Rect::from_min_size(
             Pos2::new(rect.min.x + margin, rect.max.y - player_height - margin),
@@ -30,11 +110,11 @@ impl AkaiVisualizer {
             elapsed_ms,
             total_ms,
         );
-        if progress > 0.0 {
-            Self::draw_visualizer(ui, player_rect, content_padding, scale, progress);
-        }
+        //if progress > 0.0 {
+        //Self::draw_visualizer(ui, player_rect, content_padding, scale, progress);
+        //}
         self.draw_progress_bar(ui, player_rect, content_padding, scale, progress);
-        self.draw_playback_buttons(ui, player_rect, scale, current_status);
+        self.draw_playback_buttons(ui, player_rect, content_padding, scale, current_status);
         self.draw_playlist_panel(ui, player_rect, scale);
     }
 

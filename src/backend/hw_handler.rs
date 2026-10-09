@@ -58,11 +58,11 @@ pub trait MidiHandler {
     }
 
     /// Clears the sink, queues every playable file (filter applied to all of them)
-    /// and starts playback.
+    /// does NOT start playback
     ///
     /// Returns `None` when `files` is empty. Files that fail to load are skipped
     /// with a warning and are not part of the returned playlist.
-    fn play_playlist(
+    fn add_playlist(
         files: &[String],
         sink: &Player,
         filter: &Arc<Mutex<FilterData>>,
@@ -92,8 +92,7 @@ pub trait MidiHandler {
             warn!("None of the {} files could be loaded", files.len());
             return None;
         }
-
-        sink.play();
+        
         Some(PlaylistData::builder().tracks(tracks).build())
     }
 

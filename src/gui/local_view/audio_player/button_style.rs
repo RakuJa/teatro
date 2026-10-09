@@ -1,8 +1,7 @@
-use eframe::emath::{Rect, Vec2};
+use eframe::emath::Rect;
 use eframe::epaint::{Color32, FontId};
 
 pub struct ButtonStyle {
-    size: Vec2,
     bg_color: Color32,
     border_color: Color32,
     border_width: f32,
@@ -12,7 +11,6 @@ pub struct ButtonStyle {
 impl ButtonStyle {
     pub(crate) fn new(scale: f32) -> Self {
         Self {
-            size: Vec2::new(28.0 * scale, 24.0 * scale),
             bg_color: Color32::from_rgb(60, 60, 70),
             border_color: Color32::from_rgb(100, 100, 110),
             border_width: 1.5 * scale,
@@ -22,11 +20,6 @@ impl ButtonStyle {
 
     pub(crate) const fn active_color(mut self, color: Color32) -> Self {
         self.bg_color = color;
-        self
-    }
-
-    pub(crate) const fn with_size(mut self, size: Vec2) -> Self {
-        self.size = size;
         self
     }
 }

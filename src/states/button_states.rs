@@ -43,3 +43,10 @@ impl From<KnobCtrlKey> for ToggleStates {
         }
     }
 }
+
+impl ToggleStates {
+    #[must_use]
+    pub const fn is_toggled(self, state: Self) -> bool {
+        self.intersects(state)
+    }
+}

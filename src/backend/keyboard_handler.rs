@@ -11,6 +11,7 @@ use ramidier::io::output::ChannelOutput;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tracing::{debug, warn};
+use crate::states::button_states::ToggleStates;
 
 const fn is_ambience_key(k: u8) -> bool {
     matches!(k, 2 | 4 | 7 | 9 | 11 | 14 | 16 | 19 | 21 | 23)
@@ -136,7 +137,10 @@ impl KeyboardHandler {
                 } else {
                     &audio_sinks.sound_effect_queue
                 };
-                Self::play_playlist(&[file_str.to_string()], queue, &filter, volume);
+                Self::add_playlist(&[file_str.to_string()], queue, &filter, volume);
+                if !data.button_states.is_toggled(ToggleStates::SOLO) {
+                    queue.play();
+                }
                 Ok(())
             } else {
                 bail!("Invalid UTF-8 in file path")

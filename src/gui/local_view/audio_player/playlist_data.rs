@@ -139,7 +139,7 @@ impl AkaiVisualizer {
                                     };
 
                                     let marker = if is_current {
-                                        "▶".to_string()
+                                        ">".to_string()
                                     } else {
                                         format!("{:02}", i + 1)
                                     };

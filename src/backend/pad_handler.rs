@@ -255,7 +255,9 @@ impl PadHandler {
         }
 
         let playlist = if let Ok(sinks) = state.audio_sinks.lock() {
-            Self::play_playlist(&files, &sinks.music_queue, &state.music_filter, volume)
+            let x = Self::add_playlist(&files, &sinks.music_queue, &state.music_filter, volume);
+            sinks.music_queue.play();
+            x
         } else {
             warn!("Failed to lock audio sinks; cannot play");
             return;
@@ -412,15 +414,22 @@ impl PadHandler {
                         key,
                         LedColor::Green,
                     );
-                }
-                match state.audio_sinks.lock() {
-                    Ok(audio_sinks) => {
-                        playback_handler::stop_track(&audio_sinks.sound_effect_queue);
-                        playback_handler::stop_track(&audio_sinks.ambience_queue);
+                    match state.audio_sinks.lock() {
+                        Ok(audio_sinks) => {
+                            if data.button_states.is_toggled(ToggleStates::SOLO) {
+                                playback_handler::stop_track(&audio_sinks.sound_effect_queue);
+                                playback_handler::stop_track(&audio_sinks.ambience_queue);
+                            } else {
+                                playback_handler::resume_track(&audio_sinks.sound_effect_queue);
+                                playback_handler::resume_track(&audio_sinks.ambience_queue);
+                            }
+                        }
+                        _ => {
+                            warn!("Failed to get audio sink lock, cannot mute song");
+                        }
                     }
-                    _ => {
-                        warn!("Failed to get audio sink lock, cannot mute song");
-                    }
+                } else {
+                    warn!("Failed to get audio sink lock, cannot mute song");
                 }
             }
             _ => {
