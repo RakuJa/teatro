@@ -136,7 +136,7 @@ impl KeyboardHandler {
                 } else {
                     &audio_sinks.sound_effect_queue
                 };
-                Self::play_song(&[file_str.to_string()], queue, &filter, volume);
+                Self::play_playlist(&[file_str.to_string()], queue, &filter, volume);
                 Ok(())
             } else {
                 bail!("Invalid UTF-8 in file path")

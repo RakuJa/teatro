@@ -1,71 +1,167 @@
 use crate::FilterData;
 use crate::audio::audio_filter::FilteredSource;
+use crate::backend::errors::{FilterError, PlaybackError};
 use crate::states::playlist_data::Track;
 use biquad::{Coefficients, DirectForm1, Q_BUTTERWORTH_F32, ToHertz, Type};
 use rodio::{Player, Source};
-use std::error::Error;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tracing::warn;
 
-pub fn change_filter_frequency_value(
-    filter: &Arc<Mutex<FilterData>>,
-    value: f32,
-    filter_type: Type<f32>,
-) {
-    if let Ok(mut data) = filter.lock() {
-        let fs = 44100.;
-        let next_perc = if data.previous_filter_percentage + value <= 1. {
-            1.
-        } else {
-            data.previous_filter_percentage + value
-        };
-        let f_val = fs / 100. * next_perc;
-        if let Ok(coeffs) = Coefficients::<f32>::from_params(
-            filter_type,
-            fs.hz(),
-            if f_val < fs / 2. { f_val } else { fs / 2. }.hz(),
-            Q_BUTTERWORTH_F32,
-        ) {
-            data.previous_filter_percentage = next_perc;
-            data.filter_type = filter_type;
-            if let Ok(mut f) = data.filter.lock() {
-                *f = DirectForm1::<f32>::new(coeffs);
-            } else {
-                warn!("Failed to get FilterData, cannot change filter frequency");
-            }
-        } else {
-            warn!("Failed to get coeffs to change filter value, cannot change filter frequency");
-        }
-    } else {
-        warn!("Failed to get filter data lock, cannot change filter frequency");
-    }
+/// Sample rate assumed by the filter. (should be derived from source, not hard coded)
+const SAMPLE_RATE: f32 = 44_100.;
+
+/// Filter cutoff bounds, as a percentage of the sample rate (50% == Nyquist).
+const MIN_FILTER_PERCENTAGE: f32 = 1.;
+const MAX_FILTER_PERCENTAGE: f32 = 50.;
+
+/// How much margin before the end when seeking
+const END_MARGIN: Duration = Duration::from_millis(250);
+
+/// Seeks the current track to an absolute position. `track_length` is used to ensure that
+/// We are not seeking after the song.
+pub fn seek_to(
+    sink: &Player,
+    position: Duration,
+    track_length: Duration,
+) -> Result<(), PlaybackError> {
+    let target = position.min(track_length.saturating_sub(END_MARGIN));
+    sink.try_seek(target).map_err(PlaybackError::Seek)
 }
 
+/// Seeks to a fraction (0.0..=1.0) representing a percentage of the track instead of an absolute position
+pub fn seek_to_fraction(
+    sink: &Player,
+    fraction: f32,
+    total: Duration,
+) -> Result<(), PlaybackError> {
+    let fraction = if fraction.is_finite() {
+        fraction.clamp(0., 1.)
+    } else {
+        0.
+    };
+    seek_to(sink, total.mul_f32(fraction), total)
+}
+
+/// Moves the filter cutoff by `delta` percentage points and rebuilds the coefficients.
+///
+/// The stored percentage is clamped to `[1, 50]`, so it can't wind up past
+/// the point where the cutoff stops changing.
+pub fn change_filter_frequency_value(
+    filter: &Arc<Mutex<FilterData>>,
+    delta: f32,
+    filter_type: Type<f32>,
+) -> Result<(), FilterError> {
+    let mut data = filter.lock().map_err(|_| FilterError::DataPoisoned)?;
+
+    let perc = (data.previous_filter_percentage + delta)
+        .clamp(MIN_FILTER_PERCENTAGE, MAX_FILTER_PERCENTAGE);
+    let cutoff = (SAMPLE_RATE / 100. * perc).min(SAMPLE_RATE / 2.);
+
+    let coeffs = Coefficients::<f32>::from_params(
+        filter_type,
+        SAMPLE_RATE.hz(),
+        cutoff.hz(),
+        Q_BUTTERWORTH_F32,
+    )
+    .map_err(FilterError::Coefficients)?;
+
+    *data
+        .filter
+        .lock()
+        .map_err(|_| FilterError::FilterPoisoned)? = DirectForm1::<f32>::new(coeffs);
+
+    data.previous_filter_percentage = perc;
+    data.filter_type = filter_type;
+    Ok(())
+}
+
+/// Sets the volume, clamped to `[0, 1]`, and returns the value actually applied.
 pub fn change_volume(sink: &Player, value: f32) -> f32 {
-    sink.set_volume(if value <= 0. { 0. } else { value.min(1.) });
+    sink.set_volume(value.clamp(0., 1.));
     sink.volume()
 }
 
+/// Adds `value` to the current volume and returns the new volume.
 pub fn increase_volume(sink: &Player, value: f32) -> f32 {
     change_volume(sink, sink.volume() + value)
 }
 
-pub fn add_track_to_queue(
+/// Decodes `path` and appends it to the sink's queue.
+///
+/// the track is wrapped in a `FilteredSource`. if the
+/// filter lock can't be taken, the track is queued unfiltered.
+///
+/// This does not start playback.
+pub fn enqueue(
     sink: &Player,
-    file_path: &str,
-    play: bool,
-) -> Result<Track, Box<dyn Error>> {
-    let file = std::fs::File::open(file_path)?;
-    let source = rodio::Decoder::try_from(file)?;
+    path: &str,
+    filter: Option<&Arc<Mutex<FilterData>>>,
+) -> Result<Track, PlaybackError> {
+    let file = std::fs::File::open(path).map_err(|source| PlaybackError::Open {
+        path: path.to_owned(),
+        source,
+    })?;
+    let source = rodio::Decoder::try_from(file).map_err(|source| PlaybackError::Decode {
+        path: path.to_owned(),
+        source,
+    })?;
     let track_length = source.total_duration();
-    sink.append(source);
-    if play {
-        sink.play();
+
+    let shared_filter = filter.and_then(|f| {
+        f.lock().map_or_else(
+            |_| {
+                warn!("Filter lock failed, queueing {path} without a filter");
+                None
+            },
+            |guard| Some(Arc::clone(&guard.filter)),
+        )
+    });
+
+    match shared_filter {
+        Some(filter) => sink.append(FilteredSource { source, filter }),
+        None => sink.append(source),
     }
+
     Ok(Track::builder()
         .track_length(track_length)
-        .file_path(file_path)
+        .file_path(path)
         .build())
+}
+
+pub fn current_track_index(sink: &Player, total: usize) -> usize {
+    total.saturating_sub(remaining_tracks(sink))
+}
+
+/// Jumps to `target` in the playlist, forwards or backwards.
+///
+/// A `Player` queue only moves forward, so this clears it and re-queues `tracks`.
+pub fn go_to_track(
+    sink: &Player,
+    tracks: &[Track],
+    target_idx: usize,
+    filter: Option<&Arc<Mutex<FilterData>>>,
+) -> Result<(), PlaybackError> {
+    if target_idx >= tracks.len() {
+        return Err(PlaybackError::TrackOutOfRange {
+            index: target_idx,
+            len: tracks.len(),
+        });
+    }
+
+    let was_paused = sink.is_paused();
+    sink.clear();
+
+    for track in &tracks[target_idx..] {
+        if let Err(e) = enqueue(sink, &track.file_path, filter) {
+            warn!("Skipping {}: {e}", track.file_path);
+        }
+    }
+
+    if !was_paused {
+        sink.play();
+    }
+    Ok(())
 }
 
 pub fn stop_track(sink: &Player) {
@@ -80,40 +176,11 @@ pub fn resume_track(sink: &Player) {
     sink.play();
 }
 
-pub fn play_track(
-    sink: &Player,
-    file_path: &str,
-    filter: Option<&Arc<Mutex<FilterData>>>,
-) -> Result<Track, Box<dyn Error>> {
-    sink.stop();
-    sink.clear();
-
-    let file = std::fs::File::open(file_path)?;
-    let source = rodio::Decoder::try_from(file)?;
-    let track_length = source.total_duration();
-    if let Some(filter) = filter {
-        if let Ok(f) = filter.lock() {
-            sink.append(FilteredSource {
-                source,
-                filter: Arc::clone(&f.filter),
-            });
-        } else {
-            warn!("Failed to get filter lock, will not apply filter");
-        }
-    } else {
-        sink.append(source);
-    }
-    sink.play();
-    Ok(Track::builder()
-        .track_length(track_length)
-        .file_path(file_path)
-        .build())
+/// Number of sources still in the queue (including the one playing).
+pub fn remaining_tracks(sink: &Player) -> usize {
+    sink.len()
 }
 
-pub fn get_n_of_remaining_tracks(sink: &Player) -> u64 {
-    sink.len() as u64
-}
-
-pub fn get_current_track_elapsed_time(sink: &Player) -> u64 {
-    sink.get_pos().as_secs()
+pub fn track_elapsed_time(sink: &Player) -> Duration {
+    sink.get_pos()
 }

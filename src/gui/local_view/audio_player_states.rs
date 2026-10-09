@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 pub struct PlayerInfo {
     pub(crate) last_refresh: Instant,
     pub(crate) refresh_interval: Duration,
-    pub(crate) local_elapsed: u64,
+    pub(crate) local_elapsed: Duration,
     pub(crate) status: PlayerStatus,
 }
 
@@ -71,7 +71,7 @@ impl Default for PlayerInfo {
         Self {
             last_refresh: Instant::now(),
             refresh_interval: Duration::from_millis(10),
-            local_elapsed: 0,
+            local_elapsed: Duration::default(),
             status: PlayerStatus::default(),
         }
     }

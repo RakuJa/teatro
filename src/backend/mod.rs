@@ -1,3 +1,5 @@
+pub mod errors;
+pub mod extra_midi_handler;
 pub mod hw_handler;
 pub mod keyboard_handler;
 #[cfg(feature = "midi")]

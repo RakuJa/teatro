@@ -14,4 +14,6 @@ pub enum CommsCommand {
     PausePressed,
     StopAllPressed,
     SoloPressed,
+    PlayTrackPressed { index: usize },
+    SeekTo { target: f32 },
 }

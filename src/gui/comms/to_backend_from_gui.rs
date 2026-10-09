@@ -1,4 +1,5 @@
 use crate::MidiOutputChannels;
+use crate::backend::extra_midi_handler::{ExtraMidiGroup, ExtraMidiHandler};
 use crate::backend::hw_handler::MidiHandler;
 use crate::backend::keyboard_handler::KeyboardHandler;
 use crate::backend::pad_handler::PadHandler;
@@ -110,6 +111,14 @@ pub fn handle_gui_command_and_relay_them_to_backend(
                     1,
                     music_state,
                 ),
+                CommsCommand::PlayTrackPressed { index } => {
+                    ExtraMidiHandler::handle_input(ExtraMidiGroup::SkipToIndex(index), music_state);
+                    refresh_backend(tx_command);
+                }
+                CommsCommand::SeekTo { target } => {
+                    ExtraMidiHandler::handle_input(ExtraMidiGroup::SeekTo(target), music_state);
+                    refresh_backend(tx_command);
+                }
                 _ => warn!("Unsupported command: {command:?}"),
             }
         }

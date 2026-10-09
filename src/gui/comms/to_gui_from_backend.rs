@@ -4,6 +4,7 @@ use crate::states::playlist_data::PlaylistData;
 use crate::states::visualizer::RuntimeData;
 use flume::Receiver;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tracing::{debug, warn};
 
 pub fn sync_gui_with_data_received_from_backend(
@@ -18,7 +19,7 @@ pub fn sync_gui_with_data_received_from_backend(
                     .current_playlist
                     .as_ref()
                     .and_then(PlaylistData::get_current_track)
-                    .map_or(0, |t| t.elapsed_seconds * 1000);
+                    .map_or_else(Duration::default, |t| t.elapsed_time);
                 visualizer.player_info.status = PlayerStatus::from(x.button_states);
                 visualizer.data = x;
             } else {

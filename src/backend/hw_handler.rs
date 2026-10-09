@@ -8,6 +8,7 @@ use ramidier::io::input_data::MidiInputData;
 use ramidier::io::output::ChannelOutput;
 use rodio::Player;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tracing::warn;
 
 pub trait MidiHandler {
@@ -15,67 +16,85 @@ pub trait MidiHandler {
 
     type State;
 
+    /// Recomputes the runtime data (volumes, playlist progress, ...) from the audio sinks.
     fn refresh(
         old_data: &RuntimeData,
         tx_data: &Sender<RuntimeData>,
         audio_sinks: &AudioSinks,
     ) -> RuntimeData;
 
-    fn update_gui(tx_channel: &Sender<RuntimeData>, data: &RuntimeData) {
-        if matches!(tx_channel.send(data.clone()), Ok(())) {
-        } else {
-            warn!("Failed to send data to update GUI");
+    /// Pushes a snapshot of `data` to the GUI.
+    fn update_gui(tx: &Sender<RuntimeData>, data: &RuntimeData) {
+        if tx.send(data.clone()).is_err() {
+            warn!("Failed to send data to update GUI: receiver dropped");
         }
     }
 
-    fn get_current_playlist_state(old_state: PlaylistData, sink: &Player) -> PlaylistData {
-        let curr_track_number =
-            old_state.tracks.len() as u64 - playback_handler::get_n_of_remaining_tracks(sink);
+    /// Rebuilds the playlist state from the sink: which track is current and how far in it is.
+    fn current_playlist_state(old: PlaylistData, sink: &Player) -> PlaylistData {
+        let current_track_number = old
+            .tracks
+            .len()
+            .saturating_sub(playback_handler::remaining_tracks(sink));
+
+        let tracks = old
+            .tracks
+            .into_iter()
+            .enumerate()
+            .map(|(i, t)| Track {
+                elapsed_time: if i == current_track_number {
+                    playback_handler::track_elapsed_time(sink)
+                } else {
+                    Duration::default()
+                },
+                ..t
+            })
+            .collect();
+
         PlaylistData {
-            tracks: old_state
-                .tracks
-                .into_iter()
-                .enumerate()
-                .map(|(i, x)| Track {
-                    file_path: x.file_path.clone(),
-                    track_length: x.track_length,
-                    elapsed_seconds: if i == curr_track_number as usize {
-                        playback_handler::get_current_track_elapsed_time(sink)
-                    } else {
-                        0
-                    },
-                })
-                .collect(),
-            current_track: curr_track_number,
+            tracks,
+            current_track: current_track_number as u64,
         }
     }
 
-    fn play_song(
+    /// Clears the sink, queues every playable file (filter applied to all of them)
+    /// and starts playback.
+    ///
+    /// Returns `None` when `files` is empty. Files that fail to load are skipped
+    /// with a warning and are not part of the returned playlist.
+    fn play_playlist(
         files: &[String],
-        sound_queue: &Player,
+        sink: &Player,
         filter: &Arc<Mutex<FilterData>>,
         volume: Option<f32>,
     ) -> Option<PlaylistData> {
-        let mut tracks = vec![];
-        files.first().map(|first_track| {
-            let () = sound_queue.clear();
-            if let Some(v) = volume {
-                playback_handler::change_volume(sound_queue, v);
-            }
-            if let Ok(track) =
-                playback_handler::play_track(sound_queue, first_track.as_str(), Some(filter))
-            {
-                tracks.push(track);
-            }
-            files.iter().skip(1).for_each(|file| {
-                if let Ok(track) =
-                    playback_handler::add_track_to_queue(sound_queue, file.as_str(), false)
-                {
-                    tracks.push(track);
+        if files.is_empty() {
+            return None;
+        }
+
+        sink.clear();
+        if let Some(v) = volume {
+            playback_handler::change_volume(sink, v);
+        }
+
+        let tracks: Vec<Track> = files
+            .iter()
+            .filter_map(|f| match playback_handler::enqueue(sink, f, Some(filter)) {
+                Ok(t) => Some(t),
+                Err(e) => {
+                    warn!("Skipping {f}: {e}");
+                    None
                 }
-            });
-            PlaylistData::builder().tracks(tracks).build()
-        })
+            })
+            .collect();
+
+        if tracks.is_empty() {
+            warn!("None of the {} files could be loaded", files.len());
+            return None;
+        }
+
+        sink.play();
+        Some(PlaylistData::builder().tracks(tracks).build())
     }
 
     fn listener(

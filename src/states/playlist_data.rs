@@ -27,8 +27,8 @@ impl PlaylistData {
 #[derive(Clone, Debug)]
 pub struct Track {
     pub file_path: String,
-    pub track_length: u64,
-    pub elapsed_seconds: u64,
+    pub track_length: Duration,
+    pub elapsed_time: Duration,
 }
 
 #[bon]
@@ -37,12 +37,12 @@ impl Track {
     pub fn new(
         file_path: &str,
         track_length: Option<Option<Duration>>,
-        current_position: Option<u64>,
+        current_position: Option<Duration>,
     ) -> Self {
         Self {
             file_path: file_path.to_string(),
-            track_length: track_length.unwrap_or_default().map_or(0, |x| x.as_secs()),
-            elapsed_seconds: current_position.unwrap_or(0),
+            track_length: track_length.unwrap_or_default().unwrap_or_default(),
+            elapsed_time: current_position.unwrap_or_default(),
         }
     }
 }

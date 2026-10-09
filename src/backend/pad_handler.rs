@@ -58,7 +58,7 @@ impl MidiHandler for PadHandler {
                 knob_values: old_data.knob_values.clone(),
                 button_states: old_data.button_states,
                 last_pad_pressed: old_data.last_pad_pressed,
-                current_playlist: Some(Self::get_current_playlist_state(
+                current_playlist: Some(Self::current_playlist_state(
                     playlist.clone(),
                     &audio_sinks.music_queue,
                 )),
@@ -222,49 +222,57 @@ impl PadHandler {
 
     fn handle_pad(pad: PadKey, state: &MusicState, midi_out: Option<&mut ChannelOutput>) {
         let note = pad.get_index();
-        if let Ok(mut data) = state.data.lock() {
-            let old_pad = data.last_pad_pressed;
-            data.last_pad_pressed = Some(note);
-            if let Ok(res) = files_in_nth_subdir(
-                data.settings_data
-                    .lock()
-                    .map_or_else(|_| "music".to_string(), |x| x.music_folder.clone())
-                    .as_ref(),
-                note as usize,
-            ) {
-                info!("playing the following audio folder: {}", res.0.display());
-                let mut files = res
-                    .1
-                    .iter()
-                    .filter_map(|x| x.to_str())
-                    .map(ToString::to_string)
-                    .collect::<Vec<String>>();
-                if data.button_states.contains(ToggleStates::SEND) {
-                    fastrand::shuffle(files.as_mut_slice());
-                }
-                if let Ok(audio_sinks) = state.audio_sinks.lock() {
-                    data.current_playlist = Self::play_song(
-                        &files,
-                        &audio_sinks.music_queue,
-                        &state.music_filter,
-                        data.get_music_volume(),
-                    );
-                } else {
-                    warn!("Failed to get audio sink lock, cannot play song");
-                }
-            } else {
-                warn!("No folder associated with the given button {note}");
-            }
-            let color: LedColor = (pad.get_index() + 1).try_into().unwrap_or(LedColor::Green);
-            if let Some(out) = midi_out {
-                // Turn off previous pad
-                if let Some(l_p) = old_pad {
-                    let _ = out.set_pad_led(LedMode::On10Percent, l_p, LedColor::Off);
-                }
-                let _ = out.set_pad_led(LedMode::On100Percent, note, color);
-            }
+
+        let (old_pad, folder, shuffle, volume) = {
+            let Ok(mut data) = state.data.lock() else {
+                warn!("Failed to lock data; ignoring pad action");
+                return;
+            };
+            let folder = data
+                .settings_data
+                .lock()
+                .map_or_else(|_| "music".to_string(), |s| s.music_folder.clone());
+            let old = data.last_pad_pressed.replace(note);
+            (
+                old,
+                folder,
+                data.button_states.contains(ToggleStates::SEND),
+                data.get_music_volume(),
+            )
+        };
+
+        let Ok((dir, paths)) = files_in_nth_subdir(&folder, note as usize) else {
+            warn!("No folder associated with pad {note}");
+            return;
+        };
+        info!("playing audio folder: {}", dir.display());
+        let mut files: Vec<String> = paths
+            .iter()
+            .filter_map(|p| p.to_str().map(String::from))
+            .collect();
+        if shuffle {
+            fastrand::shuffle(&mut files);
+        }
+
+        let playlist = if let Ok(sinks) = state.audio_sinks.lock() {
+            Self::play_playlist(&files, &sinks.music_queue, &state.music_filter, volume)
         } else {
-            warn!("Failed to get a lock on data. Will not handle pad action");
+            warn!("Failed to lock audio sinks; cannot play");
+            return;
+        };
+
+        if let Ok(mut data) = state.data.lock() {
+            data.current_playlist = playlist;
+        }
+
+        if let Some(out) = midi_out {
+            let color = LedColor::try_from(note + 1).unwrap_or(LedColor::Green);
+            if let Some(prev) = old_pad {
+                let _ = out.set_pad_led(LedMode::On10Percent, prev, LedColor::Off);
+            }
+            if let Err(e) = out.set_pad_led(LedMode::On100Percent, note, color) {
+                warn!("LED update failed: {e}");
+            }
         }
     }
 
@@ -315,22 +323,32 @@ impl PadHandler {
             );
 
             let filter_type = if data.button_states.contains(ToggleStates::FILTER) {
-                playback_handler::change_filter_frequency_value(
+                if let Err(e) = playback_handler::change_filter_frequency_value(
                     &state.music_filter,
                     1.,
                     Type::LowPass,
-                );
+                ) {
+                    warn!("Failed to change filter frequency value: {e}");
+                }
                 Type::LowPass
             } else {
-                playback_handler::change_filter_frequency_value(
+                if let Err(e) = playback_handler::change_filter_frequency_value(
                     &state.music_filter,
                     0.,
                     Type::AllPass,
-                );
+                ) {
+                    warn!("Failed to change filter frequency value: {e}");
+                }
                 Type::AllPass
             };
 
-            playback_handler::change_filter_frequency_value(&state.music_filter, 1., filter_type);
+            if let Err(e) = playback_handler::change_filter_frequency_value(
+                &state.music_filter,
+                1.,
+                filter_type,
+            ) {
+                warn!("Failed to change filter frequency value: {e}");
+            }
         }
     }
 
@@ -449,7 +467,9 @@ fn adjust_queue_volume(
 }
 
 fn adjust_filter(filter: &Arc<Mutex<FilterData>>, delta: f32, filter_type: Type<f32>) {
-    playback_handler::change_filter_frequency_value(filter, delta, filter_type);
+    if let Err(e) = playback_handler::change_filter_frequency_value(filter, delta, filter_type) {
+        warn!("Failed to change filter frequency value: {}", e);
+    }
 }
 
 fn change_button_status<T>(
