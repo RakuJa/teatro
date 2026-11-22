@@ -1,6 +1,6 @@
 [package]
 name = "teatro"
-version = "1.3.0"
+version = "1.4.0"
 authors = ["RakuJa"]
 
 # Compiler info
@@ -37,14 +37,14 @@ unwrap_used = { level = "warn", priority = 1 }
 [dependencies]
 
 # audio player
-rodio = "0.22"
+rodio = "0.23"
 biquad = "0.6.0"
 # Discord
 serenity = "0.12.5"
 songbird = "0.6.1"
 
 # midi
-ramidier = {version = "0.3.0"}
+ramidier = {version = "0.3.1"}
 
 # various utility
 anyhow = "1.0"
@@ -56,26 +56,25 @@ cfg-if = "1.0"
 thiserror = "2.0"
 
 # file dialog
-rfd = "0.17"
+rfd = "0.18"
 dirs = "7.0.0"
 
 # Write to config file
 serde = { version = "1.0", features = ["derive"] }
-toml = "1.1"
+toml = "1.2"
 
 # comms
 flume = "0.12.0"
 
 # gui
-eframe = { version = "0.36.2", optional = true }
-egui = { version = "0.36.2", optional = true }
-egui_font_loader = { version = "0.36.1", optional = true }
-display-info = "0.5.9"
+eframe = { version = "0.36", optional = true }
+egui = { version = "0.36", optional = true }
+egui_font_loader = { version = "0.36", optional = true }
+display-info = "0.5"
 puffin_egui = {git = "https://github.com/EmbarkStudios/puffin", rev = "911e9ef", optional = true}
 
 # Log
-#egui_tracing = "0.3.0" waiting for published update > 0.3.0
-egui_tracing = { git = "https://github.com/c-git/egui_tracing", rev = "c81c762"}
+egui_tracing = "0.4.0"
 tracing-subscriber = "0.3.23"
 tracing = "0.1.44"
 
@@ -86,7 +85,7 @@ tao = { version = "0.37.1", optional = true }
 # watchdog folder for changes
 hotwatch = { version = "0.5.0", optional = true }
 serde_json = "1.0"
-tokio = { version = "1.54.0", features = ["rt-multi-thread"] }
+tokio = { version = "1.54", features = ["rt-multi-thread"] }
 [features]
 default = ["gui", "bybe", "midi"]
 gui = ["dep:egui", "dep:eframe", "dep:egui_font_loader", "dep:hotwatch"]
