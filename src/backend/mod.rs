@@ -1,3 +1,4 @@
+pub mod audio;
 pub mod errors;
 pub mod extra_midi_handler;
 pub mod hw_handler;

@@ -9,39 +9,6 @@ use eframe::epaint::{Color32, FontFamily, FontId};
 use std::time::Duration;
 
 impl AkaiVisualizer {
-    pub fn draw_playlist_toggle(
-        &self,
-        ui: &egui::Ui,
-        player_rect: Rect,
-        content_padding: f32,
-        scale: f32,
-        button_index: usize,
-    ) {
-        let button_size = Vec2::new(28.0 * scale, 24.0 * scale);
-        let button_spacing = 8.0 * scale;
-        let x = (button_size.x + button_spacing)
-            .mul_add(button_index as f32, player_rect.min.x + content_padding);
-        let rect = Rect::from_min_size(
-            Pos2::new(x, player_rect.min.y + content_padding),
-            button_size,
-        );
-
-        let open = is_playlist_open(ui.ctx());
-        let style = ButtonStyle::new(scale).active_color(if open {
-            Color32::from_rgb(120, 200, 140)
-        } else {
-            Color32::from_rgb(60, 60, 70)
-        });
-
-        let response = draw_button(ui, rect, &style, "☰", 13.0 * scale, "playlist_btn");
-        if response.clicked() {
-            set_playlist_open(ui.ctx(), !open);
-            // Force a re-scroll to the current track whenever the panel is (re)opened
-            ui.ctx()
-                .data_mut(|d| d.remove::<usize>(egui::Id::new("akai_playlist_scrolled")));
-        }
-    }
-
     /// Returns (tracks as (`title`, `length_in_seconds`), `index` of current track)
     fn get_playlist_view(&self) -> Option<(Vec<(String, Duration)>, usize)> {
         let playlist = self
@@ -108,91 +75,14 @@ impl AkaiVisualizer {
                             .max_height(max_list_h)
                             .auto_shrink([false, true])
                             .show(ui, |ui| {
-                                for (i, (title, len_secs)) in tracks.iter().enumerate() {
-                                    let (rect, resp) = ui.allocate_exact_size(
-                                        Vec2::new(ui.available_width(), row_h),
-                                        egui::Sense::click(),
-                                    );
-                                    let is_current = i == current;
-
-                                    let bg = if is_current {
-                                        Some(Color32::from_rgba_premultiplied(150, 70, 190, 110))
-                                    } else if resp.hovered() {
-                                        Some(Color32::from_rgba_premultiplied(255, 255, 255, 20))
-                                    } else {
-                                        None
-                                    };
-                                    if let Some(bg) = bg {
-                                        ui.painter().rect_filled(rect, 4.0 * scale, bg);
-                                    }
-
-                                    // Clip so long titles never spill over the time column
-                                    let painter = ui.painter().with_clip_rect(rect);
-                                    let text_color = if is_current {
-                                        Color32::from_rgb(245, 235, 255)
-                                    } else {
-                                        Color32::from_rgb(190, 190, 200)
-                                    };
-                                    let font = FontId {
-                                        size: 13.0 * scale,
-                                        family: FontFamily::Name("Pixelify".into()),
-                                    };
-
-                                    let marker = if is_current {
-                                        ">".to_string()
-                                    } else {
-                                        format!("{:02}", i + 1)
-                                    };
-                                    painter.text(
-                                        Pos2::new(
-                                            8.0f32.mul_add(scale, rect.min.x),
-                                            rect.center().y,
-                                        ),
-                                        egui::Align2::LEFT_CENTER,
-                                        marker,
-                                        font.clone(),
-                                        Color32::from_rgb(200, 160, 220),
-                                    );
-                                    // Time on the right
-                                    painter.text(
-                                        Pos2::new(
-                                            8.0f32.mul_add(-scale, rect.max.x),
-                                            rect.center().y,
-                                        ),
-                                        egui::Align2::RIGHT_CENTER,
-                                        format_time(*len_secs),
-                                        font.clone(),
-                                        Color32::from_rgb(200, 160, 220),
-                                    );
-                                    // Title (leaves room for the time column)
-                                    let title_painter =
-                                        ui.painter().with_clip_rect(Rect::from_min_max(
-                                            rect.min,
-                                            Pos2::new(
-                                                60.0f32.mul_add(-scale, rect.max.x),
-                                                rect.max.y,
-                                            ),
-                                        ));
-                                    title_painter.text(
-                                        Pos2::new(
-                                            36.0f32.mul_add(scale, rect.min.x),
-                                            rect.center().y,
-                                        ),
-                                        egui::Align2::LEFT_CENTER,
-                                        title,
-                                        font,
-                                        text_color,
-                                    );
-
-                                    // Auto-scroll to the playing track (once per track change)
-                                    if is_current && last_scrolled != Some(current) {
-                                        resp.scroll_to_me(Some(egui::Align::Center));
-                                    }
-
-                                    if resp.clicked() {
-                                        clicked_track = Some(i);
-                                    }
-                                }
+                                clicked_track = draw_playlist_titles(
+                                    ui,
+                                    &tracks,
+                                    scale,
+                                    row_h,
+                                    current,
+                                    last_scrolled,
+                                );
                             });
                     });
             });
@@ -203,4 +93,119 @@ impl AkaiVisualizer {
             self.send_command_to_backend(CommsCommand::PlayTrackPressed { index });
         }
     }
+}
+
+pub fn draw_playlist_toggle(
+    ui: &egui::Ui,
+    player_rect: Rect,
+    content_padding: f32,
+    scale: f32,
+    button_index: usize,
+) {
+    let button_size = Vec2::new(28.0 * scale, 24.0 * scale);
+    let button_spacing = 8.0 * scale;
+    let x = (button_size.x + button_spacing)
+        .mul_add(button_index as f32, player_rect.min.x + content_padding);
+    let rect = Rect::from_min_size(
+        Pos2::new(x, player_rect.min.y + content_padding),
+        button_size,
+    );
+
+    let open = is_playlist_open(ui.ctx());
+    let style = ButtonStyle::new(scale).active_color(if open {
+        Color32::from_rgb(120, 200, 140)
+    } else {
+        Color32::from_rgb(60, 60, 70)
+    });
+
+    let response = draw_button(ui, rect, &style, "☰", 13.0 * scale, "playlist_btn");
+    if response.clicked() {
+        set_playlist_open(ui.ctx(), !open);
+        // Force a re-scroll to the current track whenever the panel is (re)opened
+        ui.ctx()
+            .data_mut(|d| d.remove::<usize>(egui::Id::new("akai_playlist_scrolled")));
+    }
+}
+
+fn draw_playlist_titles(
+    ui: &mut egui::Ui,
+    tracks: &[(String, Duration)],
+    scale: f32,
+    row_h: f32,
+    current: usize,
+    last_scrolled: Option<usize>,
+) -> Option<usize> {
+    let mut title_clicked: Option<usize> = None;
+
+    for (i, (title, len_secs)) in tracks.iter().enumerate() {
+        let (rect, resp) =
+            ui.allocate_exact_size(Vec2::new(ui.available_width(), row_h), egui::Sense::click());
+        let is_current = i == current;
+
+        let bg = if is_current {
+            Some(Color32::from_rgba_premultiplied(150, 70, 190, 110))
+        } else if resp.hovered() {
+            Some(Color32::from_rgba_premultiplied(255, 255, 255, 20))
+        } else {
+            None
+        };
+        if let Some(bg) = bg {
+            ui.painter().rect_filled(rect, 4.0 * scale, bg);
+        }
+
+        // Clip so long titles never spill over the time column
+        let painter = ui.painter().with_clip_rect(rect);
+        let text_color = if is_current {
+            Color32::from_rgb(245, 235, 255)
+        } else {
+            Color32::from_rgb(190, 190, 200)
+        };
+        let font = FontId {
+            size: 13.0 * scale,
+            family: FontFamily::Name("Pixelify".into()),
+        };
+
+        let marker = if is_current {
+            ">".to_string()
+        } else {
+            format!("{:02}", i + 1)
+        };
+        painter.text(
+            Pos2::new(8.0f32.mul_add(scale, rect.min.x), rect.center().y),
+            egui::Align2::LEFT_CENTER,
+            marker,
+            font.clone(),
+            Color32::from_rgb(200, 160, 220),
+        );
+        // Time on the right
+        painter.text(
+            Pos2::new(8.0f32.mul_add(-scale, rect.max.x), rect.center().y),
+            egui::Align2::RIGHT_CENTER,
+            format_time(*len_secs),
+            font.clone(),
+            Color32::from_rgb(200, 160, 220),
+        );
+        // Title (leaves room for the time column)
+        let title_painter = ui.painter().with_clip_rect(Rect::from_min_max(
+            rect.min,
+            Pos2::new(60.0f32.mul_add(-scale, rect.max.x), rect.max.y),
+        ));
+        title_painter.text(
+            Pos2::new(36.0f32.mul_add(scale, rect.min.x), rect.center().y),
+            egui::Align2::LEFT_CENTER,
+            title,
+            font,
+            text_color,
+        );
+
+        // Auto-scroll to the playing track (once per track change)
+        if is_current && last_scrolled != Some(current) {
+            resp.scroll_to_me(Some(egui::Align::Center));
+        }
+
+        if resp.clicked() {
+            title_clicked = Some(i);
+        }
+    }
+    title_clicked
 }

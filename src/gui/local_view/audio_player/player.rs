@@ -92,7 +92,7 @@ impl AkaiVisualizer {
 
         let player_rect = Rect::from_min_size(
             Pos2::new(rect.min.x + margin, rect.max.y - player_height - margin),
-            Vec2::new(rect.width() - margin * 2.0, player_height),
+            Vec2::new(margin.mul_add(-2.0, rect.width()), player_height),
         );
 
         Self::draw_player_background(ui, player_rect, scale);

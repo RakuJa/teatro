@@ -5,6 +5,10 @@ mod gui;
 mod os_explorer;
 mod states;
 
+use crate::audio::audio_controller::AudioController;
+use crate::audio::output::Output;
+use crate::audio::output::engine::Engine;
+use crate::backend::audio::local::LocalBackend;
 use crate::backend::listener_initializer::{prepare_midi_channels, run};
 use crate::backend::pad_handler::PadHandler;
 use crate::gui::initializer::gui_initializer;
@@ -14,7 +18,7 @@ use crate::states::music_state::MusicState;
 use crate::states::settings_data::SettingsData;
 use crate::states::sound_state::SoundState;
 use crate::states::visualizer::RuntimeData;
-use biquad::{Coefficients, DirectForm1, Q_BUTTERWORTH_F32, ToHertz, Type};
+use biquad::Type;
 use dotenvy::dotenv;
 use egui_tracing::tracing::collector::EventCollector;
 use egui_tracing::tracing_subscriber;
@@ -26,7 +30,7 @@ use ramidier::io::input::InputChannel;
 use ramidier::io::output::ChannelOutput;
 use rodio::Player;
 use std::env;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 use tracing::Level;
 use tracing::warn;
 
@@ -65,6 +69,8 @@ fn main() {
     #[cfg(feature = "gui")]
     let watchdog_settings = settings.clone();
 
+    let audio_settings = settings.clone();
+
     let backend_data = RuntimeData::builder()
         .settings_data(settings)
         .pad_labels(pad_labels)
@@ -77,9 +83,20 @@ fn main() {
 
     let stream_handle = rodio::DeviceSinkBuilder::open_default_sink()
         .expect("Audio stream should be writable and readable");
-    let music_queue = Player::connect_new(stream_handle.mixer());
-    let ambience_queue = Player::connect_new(stream_handle.mixer());
-    let sound_effect_queue = Player::connect_new(stream_handle.mixer());
+
+    let engine = Engine::new();
+
+    let music_queue = Player::connect_new(engine.mixer());
+    let ambience_queue = Player::connect_new(engine.mixer());
+    let sound_effect_queue = Player::connect_new(engine.mixer());
+
+    let output = Output::new(&engine).with(LocalBackend::new(&engine, stream_handle.mixer()));
+    let audio = AudioController::install(engine, output);
+    audio.apply(
+        &audio_settings
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner),
+    );
 
     let states = prepare_audio_states(
         music_queue,
@@ -164,14 +181,6 @@ fn main() {
     }
 }
 
-fn get_base_filter_data(coeffs: Coefficients<f32>) -> FilterData {
-    FilterData {
-        previous_filter_percentage: 1.,
-        filter_type: Type::AllPass,
-        filter: Arc::new(Mutex::new(DirectForm1::<f32>::new(coeffs))),
-    }
-}
-
 fn prepare_audio_states(
     music_queue: Player,
     ambience_queue: Player,
@@ -185,18 +194,9 @@ fn prepare_audio_states(
         sound_effect_queue,
     }));
 
-    //let sample_rate = 44100.0;
-    let sample_rate = 10.0;
-    let coeffs = Coefficients::<f32>::from_params(
-        Type::AllPass,
-        sample_rate.hz(),
-        1.hz(),
-        Q_BUTTERWORTH_F32,
-    )
-    .expect("Could not create coeffs to initialize filters");
-    let music_filter_data = Arc::new(Mutex::new(get_base_filter_data(coeffs)));
-    let ambience_filter = Arc::new(Mutex::new(get_base_filter_data(coeffs)));
-    let sound_effect_filter = Arc::new(Mutex::new(get_base_filter_data(coeffs)));
+    let music_filter_data = Arc::new(Mutex::new(FilterData::new(1., Type::AllPass)));
+    let ambience_filter = Arc::new(Mutex::new(FilterData::new(1., Type::AllPass)));
+    let sound_effect_filter = Arc::new(Mutex::new(FilterData::new(1., Type::AllPass)));
 
     (
         MusicState {

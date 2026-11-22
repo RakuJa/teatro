@@ -176,7 +176,7 @@ impl AkaiVisualizer {
                 egui::Stroke::new(2.5 * scale, Color32::from_rgb(90, 90, 100)),
             );
 
-            let angle = -2.4f32 + current_value * 4.8;
+            let angle = current_value.mul_add(4.8, -2.4f32);
             let indicator_len = knob_radius * 0.7;
             let end = Pos2::new(
                 angle.cos().mul_add(indicator_len, x),

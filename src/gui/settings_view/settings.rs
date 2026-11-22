@@ -1,3 +1,4 @@
+use crate::audio::output::OutputKind;
 use crate::gui::comms::command::CommsCommand;
 use crate::gui::ui::AkaiVisualizer;
 use crate::states::settings_data::SettingsData;
@@ -29,6 +30,24 @@ fn get_default_file_dialog() -> FileDialog {
         |_| FileDialog::new(),
         |path| FileDialog::new().set_directory(path),
     )
+}
+
+const fn output_kind_label(kind: OutputKind) -> &'static str {
+    match kind {
+        OutputKind::Local => "PC audio (local sources)",
+        OutputKind::Discord => "Discord (voice channel)",
+    }
+}
+
+fn snowflake_edit(ui: &mut egui::Ui, value: &mut String, hint: &str) {
+    let response = ui.add(
+        egui::TextEdit::singleline(value)
+            .hint_text(hint)
+            .desired_width(220.0),
+    );
+    if response.changed() {
+        value.retain(|c| c.is_ascii_digit());
+    }
 }
 
 impl AkaiVisualizer {
@@ -99,6 +118,14 @@ impl AkaiVisualizer {
             });
 
             ui.add_space(10.0);
+            ui.separator();
+            ui.add_space(5.0);
+            ui.strong("Audio output");
+            ui.add_space(5.0);
+
+            self.render_audio_output_settings(ui);
+
+            ui.add_space(10.0);
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
                 if ui.button("Save Settings").clicked() {
@@ -109,9 +136,80 @@ impl AkaiVisualizer {
                     {
                         s.copy_data(&self.settings_data);
                     }
+                    self.settings_data.apply_audio();
                     self.send_command_to_watchdog(CommsCommand::Refresh {});
                 }
             });
+        });
+    }
+    fn render_audio_output_settings(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Audio output:");
+            egui::ComboBox::from_id_salt("audio_output_combo")
+                .selected_text(output_kind_label(self.settings_data.audio_output))
+                .show_ui(ui, |ui| {
+                    for kind in [OutputKind::Local, OutputKind::Discord] {
+                        ui.selectable_value(
+                            &mut self.settings_data.audio_output,
+                            kind,
+                            output_kind_label(kind),
+                        );
+                    }
+                });
+        });
+
+        ui.add_space(5.0);
+
+        // Discord options only matter when Discord is the selected output.
+        let discord_selected = self.settings_data.audio_output == OutputKind::Discord;
+        ui.add_enabled_ui(discord_selected, |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Discord bot token:");
+
+                let show_id = ui.id().with("show_discord_token");
+                let mut show = ui.data_mut(|d| d.get_temp::<bool>(show_id).unwrap_or(false));
+
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.settings_data.discord_bot_token)
+                        .password(!show)
+                        .hint_text("Bot token")
+                        .desired_width(320.0),
+                );
+                if ui.button(if show { "Hide" } else { "Show" }).clicked() {
+                    show = !show;
+                }
+                ui.data_mut(|d| d.insert_temp(show_id, show));
+            });
+
+            ui.add_space(5.0);
+
+            ui.horizontal(|ui| {
+                ui.label("Discord server ID:");
+                snowflake_edit(ui, &mut self.settings_data.discord_server_id, "Guild ID");
+            });
+
+            ui.add_space(5.0);
+
+            ui.horizontal(|ui| {
+                ui.label("Discord voice channel ID:");
+                snowflake_edit(
+                    ui,
+                    &mut self.settings_data.discord_voice_channel_id,
+                    "Voice channel ID",
+                );
+            });
+
+            if discord_selected
+                && (self.settings_data.discord_bot_token.trim().is_empty()
+                    || self.settings_data.discord_server_id.is_empty()
+                    || self.settings_data.discord_voice_channel_id.is_empty())
+            {
+                ui.add_space(3.0);
+                ui.colored_label(
+                    ui.visuals().warn_fg_color,
+                    "Token, server ID and voice channel ID are all required for Discord output.",
+                );
+            }
         });
     }
 }

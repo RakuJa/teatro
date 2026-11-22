@@ -76,14 +76,19 @@ pub trait MidiHandler {
         if let Some(v) = volume {
             playback_handler::change_volume(sink, v);
         }
-
         let tracks: Vec<Track> = files
             .iter()
-            .filter_map(|f| match playback_handler::enqueue(sink, f, Some(filter)) {
-                Ok(t) => Some(t),
-                Err(e) => {
-                    warn!("Skipping {f}: {e}");
-                    None
+            .filter_map(|f| {
+                match playback_handler::enqueue(
+                    sink,
+                    f,
+                    filter.lock().map(|x| x.clone()).ok().as_ref(),
+                ) {
+                    Ok(t) => Some(t),
+                    Err(e) => {
+                        warn!("Skipping {f}: {e}");
+                        None
+                    }
                 }
             })
             .collect();
@@ -92,7 +97,7 @@ pub trait MidiHandler {
             warn!("None of the {} files could be loaded", files.len());
             return None;
         }
-        
+
         Some(PlaylistData::builder().tracks(tracks).build())
     }
 

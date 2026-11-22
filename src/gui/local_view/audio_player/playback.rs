@@ -1,5 +1,6 @@
 use crate::gui::comms::command::CommsCommand;
 use crate::gui::local_view::audio_player::player::{PlayerLayout, palette};
+use crate::gui::local_view::audio_player::playlist_data::draw_playlist_toggle;
 use crate::gui::local_view::audio_player_states::PlayerStatus;
 use crate::gui::ui::AkaiVisualizer;
 use eframe::emath::{Pos2, Rect, Vec2};
@@ -52,50 +53,128 @@ fn arrow_head(painter: &Painter, tip: Pos2, size: f32, color: Color32) {
     ));
 }
 
+fn paint_icon_play(painter: &Painter, c: Pos2, s: f32, color: Color32) {
+    painter.add(Shape::convex_polygon(
+        vec![
+            Pos2::new(s.mul_add(-0.45, c.x), s.mul_add(-0.75, c.y)),
+            Pos2::new(s.mul_add(-0.45, c.x), s.mul_add(0.75, c.y)),
+            Pos2::new(s.mul_add(0.8, c.x), c.y),
+        ],
+        color,
+        Stroke::NONE,
+    ));
+}
+
+fn paint_icon_pause(painter: &Painter, c: Pos2, s: f32, color: Color32, scale: f32) {
+    let w = s * 0.42;
+    let h = s * 1.5;
+    for dx in [-s * 0.42, s * 0.42] {
+        painter.rect_filled(
+            Rect::from_center_size(Pos2::new(c.x + dx, c.y), Vec2::new(w, h)),
+            1.0 * scale,
+            color,
+        );
+    }
+}
+
+fn paint_icon_next(painter: &Painter, c: Pos2, s: f32, color: Color32, scale: f32) {
+    painter.add(Shape::convex_polygon(
+        vec![
+            Pos2::new(s.mul_add(-0.75, c.x), s.mul_add(-0.65, c.y)),
+            Pos2::new(s.mul_add(-0.75, c.x), s.mul_add(0.65, c.y)),
+            Pos2::new(s.mul_add(0.35, c.x), c.y),
+        ],
+        color,
+        Stroke::NONE,
+    ));
+    painter.rect_filled(
+        Rect::from_min_max(
+            Pos2::new(s.mul_add(0.45, c.x), s.mul_add(-0.65, c.y)),
+            Pos2::new(s.mul_add(0.8, c.x), s.mul_add(0.65, c.y)),
+        ),
+        0.5 * scale,
+        color,
+    );
+}
+
+fn paint_icon_shuffle(painter: &Painter, c: Pos2, s: f32, color: Color32, stroke: Stroke) {
+    let l = s * 0.95;
+    let a = Pos2::new(c.x - l, s.mul_add(-0.55, c.y));
+    let b = Pos2::new(c.x - l, s.mul_add(0.55, c.y));
+    let a2 = Pos2::new(s.mul_add(-0.3, c.x + l), s.mul_add(0.55, c.y));
+    let b2 = Pos2::new(s.mul_add(-0.3, c.x + l), s.mul_add(-0.55, c.y));
+    painter.line_segment([a, a2], stroke);
+    painter.line_segment([b, b2], stroke);
+    arrow_head(
+        painter,
+        Pos2::new(s.mul_add(0.2, c.x + l), s.mul_add(0.55, c.y)),
+        s * 0.6,
+        color,
+    );
+    arrow_head(
+        painter,
+        Pos2::new(s.mul_add(0.2, c.x + l), s.mul_add(-0.55, c.y)),
+        s * 0.6,
+        color,
+    );
+}
+
+fn paint_icon_speaker(
+    painter: &Painter,
+    c: Pos2,
+    s: f32,
+    color: Color32,
+    scale: f32,
+    stroke: Stroke,
+    icon: Icon,
+) {
+    let x0 = s.mul_add(-0.9, c.x);
+    painter.rect_filled(
+        Rect::from_min_max(
+            Pos2::new(x0, s.mul_add(-0.35, c.y)),
+            Pos2::new(s.mul_add(0.5, x0), s.mul_add(0.35, c.y)),
+        ),
+        0.5 * scale,
+        color,
+    );
+    painter.add(Shape::convex_polygon(
+        vec![
+            Pos2::new(s.mul_add(0.5, x0), s.mul_add(-0.35, c.y)),
+            Pos2::new(s.mul_add(1.1, x0), s.mul_add(-0.85, c.y)),
+            Pos2::new(s.mul_add(1.1, x0), s.mul_add(0.85, c.y)),
+            Pos2::new(s.mul_add(0.5, x0), s.mul_add(0.35, c.y)),
+        ],
+        color,
+        Stroke::NONE,
+    ));
+    let wave_center = Pos2::new(s.mul_add(1.1, x0), c.y);
+    if icon == Icon::Speaker {
+        for r in [s * 0.6, s * 1.05] {
+            painter.add(Shape::line(
+                arc_points(wave_center, r, -42.0, 42.0, 10),
+                stroke,
+            ));
+        }
+    } else {
+        let k = s * 0.35;
+        let m = Pos2::new(s.mul_add(1.75, x0), c.y);
+        painter.line_segment(
+            [Pos2::new(m.x - k, m.y - k), Pos2::new(m.x + k, m.y + k)],
+            stroke,
+        );
+        painter.line_segment(
+            [Pos2::new(m.x - k, m.y + k), Pos2::new(m.x + k, m.y - k)],
+            stroke,
+        );
+    }
+}
+
 fn paint_icon(painter: &Painter, icon: Icon, c: Pos2, s: f32, color: Color32, scale: f32) {
     let stroke = Stroke::new(1.7 * scale, color);
     match icon {
-        Icon::Play => {
-            painter.add(Shape::convex_polygon(
-                vec![
-                    Pos2::new(s.mul_add(-0.45, c.x), s.mul_add(-0.75, c.y)),
-                    Pos2::new(s.mul_add(-0.45, c.x), s.mul_add(0.75, c.y)),
-                    Pos2::new(s.mul_add(0.8, c.x), c.y),
-                ],
-                color,
-                Stroke::NONE,
-            ));
-        }
-        Icon::Pause => {
-            let w = s * 0.42;
-            let h = s * 1.5;
-            for dx in [-s * 0.42, s * 0.42] {
-                painter.rect_filled(
-                    Rect::from_center_size(Pos2::new(c.x + dx, c.y), Vec2::new(w, h)),
-                    1.0 * scale,
-                    color,
-                );
-            }
-        }
-        Icon::Next => {
-            painter.add(Shape::convex_polygon(
-                vec![
-                    Pos2::new(s.mul_add(-0.75, c.x), s.mul_add(-0.65, c.y)),
-                    Pos2::new(s.mul_add(-0.75, c.x), s.mul_add(0.65, c.y)),
-                    Pos2::new(s.mul_add(0.35, c.x), c.y),
-                ],
-                color,
-                Stroke::NONE,
-            ));
-            painter.rect_filled(
-                Rect::from_min_max(
-                    Pos2::new(s.mul_add(0.45, c.x), s.mul_add(-0.65, c.y)),
-                    Pos2::new(s.mul_add(0.8, c.x), s.mul_add(0.65, c.y)),
-                ),
-                0.5 * scale,
-                color,
-            );
-        }
+        Icon::Play => paint_icon_play(painter, c, s, color),
+        Icon::Pause => paint_icon_pause(painter, c, s, color, scale),
+        Icon::Next => paint_icon_next(painter, c, s, color, scale),
         Icon::Stop => {
             painter.rect_filled(
                 Rect::from_center_size(c, Vec2::splat(s * 1.35)),
@@ -112,67 +191,9 @@ fn paint_icon(painter: &Painter, icon: Icon, c: Pos2, s: f32, color: Color32, sc
                 color,
             );
         }
-        Icon::Shuffle => {
-            let l = s * 0.95;
-            let a = Pos2::new(c.x - l, s.mul_add(-0.55, c.y));
-            let b = Pos2::new(c.x - l, s.mul_add(0.55, c.y));
-            let a2 = Pos2::new(s.mul_add(-0.3, c.x + l), s.mul_add(0.55, c.y));
-            let b2 = Pos2::new(s.mul_add(-0.3, c.x + l), s.mul_add(-0.55, c.y));
-            painter.line_segment([a, a2], stroke);
-            painter.line_segment([b, b2], stroke);
-            arrow_head(
-                painter,
-                Pos2::new(s.mul_add(0.2, c.x + l), s.mul_add(0.55, c.y)),
-                s * 0.6,
-                color,
-            );
-            arrow_head(
-                painter,
-                Pos2::new(s.mul_add(0.2, c.x + l), s.mul_add(-0.55, c.y)),
-                s * 0.6,
-                color,
-            );
-        }
+        Icon::Shuffle => paint_icon_shuffle(painter, c, s, color, stroke),
         Icon::Speaker | Icon::SpeakerMuted => {
-            let x0 = s.mul_add(-0.9, c.x);
-            painter.rect_filled(
-                Rect::from_min_max(
-                    Pos2::new(x0, s.mul_add(-0.35, c.y)),
-                    Pos2::new(s.mul_add(0.5, x0), s.mul_add(0.35, c.y)),
-                ),
-                0.5 * scale,
-                color,
-            );
-            painter.add(Shape::convex_polygon(
-                vec![
-                    Pos2::new(s.mul_add(0.5, x0), s.mul_add(-0.35, c.y)),
-                    Pos2::new(s.mul_add(1.1, x0), s.mul_add(-0.85, c.y)),
-                    Pos2::new(s.mul_add(1.1, x0), s.mul_add(0.85, c.y)),
-                    Pos2::new(s.mul_add(0.5, x0), s.mul_add(0.35, c.y)),
-                ],
-                color,
-                Stroke::NONE,
-            ));
-            let wave_center = Pos2::new(s.mul_add(1.1, x0), c.y);
-            if icon == Icon::Speaker {
-                for r in [s * 0.6, s * 1.05] {
-                    painter.add(Shape::line(
-                        arc_points(wave_center, r, -42.0, 42.0, 10),
-                        stroke,
-                    ));
-                }
-            } else {
-                let k = s * 0.35;
-                let m = Pos2::new(s.mul_add(1.75, x0), c.y);
-                painter.line_segment(
-                    [Pos2::new(m.x - k, m.y - k), Pos2::new(m.x + k, m.y + k)],
-                    stroke,
-                );
-                painter.line_segment(
-                    [Pos2::new(m.x - k, m.y + k), Pos2::new(m.x + k, m.y - k)],
-                    stroke,
-                );
-            }
+            paint_icon_speaker(painter, c, s, color, scale, stroke, icon);
         }
     }
 }
@@ -378,7 +399,7 @@ impl AkaiVisualizer {
             }
         }
 
-        self.draw_playlist_toggle(ui, player_rect, content_padding, scale, toggles.len());
+        draw_playlist_toggle(ui, player_rect, content_padding, scale, toggles.len());
     }
 
     pub(crate) fn draw_playback_buttons(

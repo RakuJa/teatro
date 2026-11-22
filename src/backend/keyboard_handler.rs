@@ -1,6 +1,8 @@
 use crate::backend::hw_handler::MidiHandler;
 use crate::os_explorer::explorer::get_all_files_in_folder;
 use crate::states::audio_sinks::AudioSinks;
+use crate::states::button_states::ToggleStates;
+use crate::states::filter_data::FilterData;
 use crate::states::sound_state::SoundState;
 use crate::states::visualizer::RuntimeData;
 use anyhow::bail;
@@ -11,7 +13,6 @@ use ramidier::io::output::ChannelOutput;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tracing::{debug, warn};
-use crate::states::button_states::ToggleStates;
 
 const fn is_ambience_key(k: u8) -> bool {
     matches!(k, 2 | 4 | 7 | 9 | 11 | 14 | 16 | 19 | 21 | 23)
@@ -89,7 +90,13 @@ impl KeyboardHandler {
             KeyboardInputGroup::Key(k) => {
                 if let Ok(data) = state.data.lock()
                     && let Ok(audio_sinks) = state.audio_sinks.lock()
-                    && let Err(e) = Self::play_sound_file(k, &data, &audio_sinks, state)
+                    && let Err(e) = Self::play_sound_file(
+                        k,
+                        &data,
+                        &audio_sinks,
+                        state.sound_effect_filter.clone(),
+                        state.ambience_filter.clone(),
+                    )
                 {
                     warn!("Error while trying to play sound file: {e}");
                 }
@@ -101,7 +108,8 @@ impl KeyboardHandler {
         key: u8,
         data: &RuntimeData,
         audio_sinks: &AudioSinks,
-        state: &SoundState,
+        sound_effect_filter: Arc<Mutex<FilterData>>,
+        ambience_filter: Arc<Mutex<FilterData>>,
     ) -> anyhow::Result<()> {
         let w_k = map_key_to_white_key_index(key);
         let (index, folder, filter, volume) = if w_k > 0 {
@@ -111,7 +119,7 @@ impl KeyboardHandler {
                     |_| "sound_effect".to_string(),
                     |x| x.sound_effect_folder.clone(),
                 ),
-                state.sound_effect_filter.clone(),
+                sound_effect_filter,
                 data.get_sound_effect_volume(),
             )
         } else {
@@ -124,7 +132,7 @@ impl KeyboardHandler {
                 data.settings_data
                     .lock()
                     .map_or_else(|_| "ambience".to_string(), |x| x.ambience_folder.clone()),
-                state.ambience_filter.clone(),
+                ambience_filter,
                 data.get_ambience_volume(),
             )
         };

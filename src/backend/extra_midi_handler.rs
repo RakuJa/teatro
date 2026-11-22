@@ -100,12 +100,10 @@ impl ExtraMidiHandler {
             warn!("Failed to lock audio sinks; cannot skip to {index}");
             return;
         };
-        if let Err(e) = playback_handler::go_to_track(
-            &sinks.music_queue,
-            &tracks,
-            index,
-            Some(&state.music_filter),
-        ) {
+        if let Ok(filter) = state.music_filter.lock()
+            && let Err(e) =
+                playback_handler::go_to_track(&sinks.music_queue, &tracks, index, Some(&*filter))
+        {
             warn!("Cannot skip to track {index}: {e}");
             return;
         }

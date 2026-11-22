@@ -1,19 +1,11 @@
 use crate::FilterData;
 use crate::audio::audio_filter::FilteredSource;
-use crate::backend::errors::{FilterError, PlaybackError};
+use crate::backend::errors::PlaybackError;
 use crate::states::playlist_data::Track;
-use biquad::{Coefficients, DirectForm1, Q_BUTTERWORTH_F32, ToHertz, Type};
+use biquad::Type;
 use rodio::{Player, Source};
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tracing::warn;
-
-/// Sample rate assumed by the filter. (should be derived from source, not hard coded)
-const SAMPLE_RATE: f32 = 44_100.;
-
-/// Filter cutoff bounds, as a percentage of the sample rate (50% == Nyquist).
-const MIN_FILTER_PERCENTAGE: f32 = 1.;
-const MAX_FILTER_PERCENTAGE: f32 = 50.;
 
 /// How much margin before the end when seeking
 const END_MARGIN: Duration = Duration::from_millis(250);
@@ -47,33 +39,8 @@ pub fn seek_to_fraction(
 ///
 /// The stored percentage is clamped to `[1, 50]`, so it can't wind up past
 /// the point where the cutoff stops changing.
-pub fn change_filter_frequency_value(
-    filter: &Arc<Mutex<FilterData>>,
-    delta: f32,
-    filter_type: Type<f32>,
-) -> Result<(), FilterError> {
-    let mut data = filter.lock().map_err(|_| FilterError::DataPoisoned)?;
-
-    let perc = (data.previous_filter_percentage + delta)
-        .clamp(MIN_FILTER_PERCENTAGE, MAX_FILTER_PERCENTAGE);
-    let cutoff = (SAMPLE_RATE / 100. * perc).min(SAMPLE_RATE / 2.);
-
-    let coeffs = Coefficients::<f32>::from_params(
-        filter_type,
-        SAMPLE_RATE.hz(),
-        cutoff.hz(),
-        Q_BUTTERWORTH_F32,
-    )
-    .map_err(FilterError::Coefficients)?;
-
-    *data
-        .filter
-        .lock()
-        .map_err(|_| FilterError::FilterPoisoned)? = DirectForm1::<f32>::new(coeffs);
-
-    data.previous_filter_percentage = perc;
-    data.filter_type = filter_type;
-    Ok(())
+pub fn change_filter_frequency_value(filter: &FilterData, delta: f32, filter_type: Type<f32>) {
+    filter.adjust(delta, filter_type);
 }
 
 /// Sets the volume, clamped to `[0, 1]`, and returns the value actually applied.
@@ -96,7 +63,7 @@ pub fn increase_volume(sink: &Player, value: f32) -> f32 {
 pub fn enqueue(
     sink: &Player,
     path: &str,
-    filter: Option<&Arc<Mutex<FilterData>>>,
+    filter: Option<&FilterData>,
 ) -> Result<Track, PlaybackError> {
     let file = std::fs::File::open(path).map_err(|source| PlaybackError::Open {
         path: path.to_owned(),
@@ -108,18 +75,8 @@ pub fn enqueue(
     })?;
     let track_length = source.total_duration();
 
-    let shared_filter = filter.and_then(|f| {
-        f.lock().map_or_else(
-            |_| {
-                warn!("Filter lock failed, queueing {path} without a filter");
-                None
-            },
-            |guard| Some(Arc::clone(&guard.filter)),
-        )
-    });
-
-    match shared_filter {
-        Some(filter) => sink.append(FilteredSource { source, filter }),
+    match filter {
+        Some(f) => sink.append(FilteredSource::new(source, f.clone())),
         None => sink.append(source),
     }
 
@@ -140,7 +97,7 @@ pub fn go_to_track(
     sink: &Player,
     tracks: &[Track],
     target_idx: usize,
-    filter: Option<&Arc<Mutex<FilterData>>>,
+    filter: Option<&FilterData>,
 ) -> Result<(), PlaybackError> {
     if target_idx >= tracks.len() {
         return Err(PlaybackError::TrackOutOfRange {

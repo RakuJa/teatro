@@ -324,32 +324,18 @@ impl PadHandler {
                 LedColor::Green,
             );
 
-            let filter_type = if data.button_states.contains(ToggleStates::FILTER) {
-                if let Err(e) = playback_handler::change_filter_frequency_value(
-                    &state.music_filter,
-                    1.,
-                    Type::LowPass,
-                ) {
-                    warn!("Failed to change filter frequency value: {e}");
-                }
-                Type::LowPass
-            } else {
-                if let Err(e) = playback_handler::change_filter_frequency_value(
-                    &state.music_filter,
-                    0.,
-                    Type::AllPass,
-                ) {
-                    warn!("Failed to change filter frequency value: {e}");
-                }
-                Type::AllPass
-            };
+            if let Ok(filter) = state.music_filter.lock() {
+                let filter_type = if data.button_states.contains(ToggleStates::FILTER) {
+                    playback_handler::change_filter_frequency_value(&filter, 1., Type::LowPass);
+                    Type::LowPass
+                } else {
+                    playback_handler::change_filter_frequency_value(&filter, 0., Type::AllPass);
+                    Type::AllPass
+                };
 
-            if let Err(e) = playback_handler::change_filter_frequency_value(
-                &state.music_filter,
-                1.,
-                filter_type,
-            ) {
-                warn!("Failed to change filter frequency value: {e}");
+                playback_handler::change_filter_frequency_value(&filter, 1., filter_type);
+            } else {
+                warn!("Failed to change filter frequency value: cannot acquire lock on filter");
             }
         }
     }
@@ -476,8 +462,10 @@ fn adjust_queue_volume(
 }
 
 fn adjust_filter(filter: &Arc<Mutex<FilterData>>, delta: f32, filter_type: Type<f32>) {
-    if let Err(e) = playback_handler::change_filter_frequency_value(filter, delta, filter_type) {
-        warn!("Failed to change filter frequency value: {}", e);
+    if let Ok(f) = filter.lock() {
+        playback_handler::change_filter_frequency_value(&f, delta, filter_type);
+    } else {
+        warn!("Failed to change filter frequency value: cannot acquire lock on filter");
     }
 }
 

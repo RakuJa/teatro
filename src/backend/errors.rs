@@ -23,16 +23,3 @@ pub enum PlaybackError {
     #[error("Seek failed: {0}")]
     Seek(#[source] rodio::source::SeekError),
 }
-
-/// Errors raised while updating the shared filter.
-#[derive(Debug, Error)]
-pub enum FilterError {
-    #[error("filter data lock is poisoned")]
-    DataPoisoned,
-
-    #[error("biquad filter lock is poisoned")]
-    FilterPoisoned,
-
-    #[error("invalid filter coefficients: {0:?}")]
-    Coefficients(biquad::Errors),
-}

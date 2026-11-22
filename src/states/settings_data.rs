@@ -1,8 +1,11 @@
+use crate::audio::audio_controller::AudioController;
+use crate::audio::output::OutputKind;
 use anyhow::bail;
 use display_info::DisplayInfo;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use tracing::debug;
+use tracing::log::warn;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SettingsData {
@@ -11,6 +14,11 @@ pub struct SettingsData {
     pub(crate) sound_effect_folder: String,
     pub(crate) detected_display_hz: f32,
     pub(crate) repaint_display_hz: f32,
+    pub(crate) discord_bot_token: String,
+    pub(crate) discord_server_id: String,
+    pub(crate) discord_voice_channel_id: String,
+    #[serde(default)]
+    pub(crate) audio_output: OutputKind,
 }
 
 impl Default for SettingsData {
@@ -22,6 +30,10 @@ impl Default for SettingsData {
             sound_effect_folder: "sound".to_string(),
             detected_display_hz: display_hz,
             repaint_display_hz: display_hz,
+            discord_bot_token: String::new(),
+            discord_server_id: String::new(),
+            discord_voice_channel_id: String::new(),
+            audio_output: OutputKind::default(),
         }
     }
 }
@@ -42,6 +54,13 @@ impl SettingsData {
         self.ambience_folder.clone_from(&new_data.ambience_folder);
         self.sound_effect_folder
             .clone_from(&new_data.sound_effect_folder);
+        self.audio_output = new_data.audio_output;
+        self.discord_bot_token
+            .clone_from(&new_data.discord_bot_token);
+        self.discord_server_id
+            .clone_from(&new_data.discord_server_id);
+        self.discord_voice_channel_id
+            .clone_from(&new_data.discord_voice_channel_id);
     }
     pub fn write_to_config(&self, config_path: &str) -> anyhow::Result<()> {
         let toml_string = toml::to_string(self)?;
@@ -56,5 +75,12 @@ impl SettingsData {
         let contents = fs::read_to_string(path)?;
         let config: Self = toml::from_str(&contents)?;
         Ok(config)
+    }
+
+    pub fn apply_audio(&self) {
+        match AudioController::global() {
+            Some(audio) => audio.apply(self),
+            None => warn!("Audio controller not installed; output not changed"),
+        }
     }
 }
