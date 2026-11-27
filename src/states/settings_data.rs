@@ -7,6 +7,8 @@ use std::fs;
 use tracing::debug;
 use tracing::log::warn;
 
+const DEFAULT_MAX_REPAINT_HZ: f32 = 30.0;
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SettingsData {
     pub(crate) music_folder: String,
@@ -29,7 +31,7 @@ impl Default for SettingsData {
             ambience_folder: "ambience".to_string(),
             sound_effect_folder: "sound".to_string(),
             detected_display_hz: display_hz,
-            repaint_display_hz: display_hz,
+            repaint_display_hz: display_hz.min(DEFAULT_MAX_REPAINT_HZ),
             discord_bot_token: String::new(),
             discord_server_id: String::new(),
             discord_voice_channel_id: String::new(),

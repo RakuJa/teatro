@@ -145,24 +145,22 @@ impl AkaiVisualizer {
 
     fn get_audio_player_data(&self) -> (String, f32, Duration, Duration, PlayerStatus) {
         if let Ok(gui_data) = self.gui_data.lock()
-            && let Some(playlist) = gui_data.data.current_playlist.clone()
+            && let Some(playlist) = gui_data.data.current_playlist.as_ref()
             && let Some(track) = playlist.tracks.get(playlist.current_track as usize)
         {
-            let prog = if gui_data.player_info.status.is_music_playable() {
+            let info = &gui_data.player_info;
+            let elapsed = info.display_elapsed(track.track_length);
+            let prog = if !info.is_playing() || track.track_length.is_zero() {
                 0.
-            } else if !track.track_length.is_zero() {
-                (gui_data.player_info.local_elapsed.as_secs_f64()
-                    / track.track_length.as_secs_f64())
-                .clamp(0., 1.)
             } else {
-                0.
+                (elapsed.as_secs_f64() / track.track_length.as_secs_f64()).clamp(0., 1.)
             };
             (
                 track.file_path.clone(),
                 prog as f32,
-                gui_data.player_info.local_elapsed,
+                elapsed,
                 track.track_length,
-                gui_data.player_info.status,
+                info.status,
             )
         } else {
             (

@@ -80,6 +80,14 @@ impl AkaiVisualizer {
         let start_x = 20.0f32.mul_add(scale, rect.min.x);
         let start_y = 10.0f32.mul_add(scale, rect.min.y);
 
+        // Lock once for the whole grid instead of doing two locks per pad
+        let gui_data = self
+            .gui_data
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let last_pad_pressed = gui_data.data.last_pad_pressed;
+        let mut clicked_pad = None;
+
         for row in 0..5 {
             for col in 0..8 {
                 let idx = (4 - row) * 8 + col;
@@ -90,13 +98,11 @@ impl AkaiVisualizer {
 
                 let pad_response = ui.allocate_rect(pad_rect, egui::Sense::click());
                 if pad_response.clicked() {
-                    self.send_command_to_backend(CommsCommand::PadPressed { key: idx });
+                    clicked_pad = Some(idx);
                 }
 
                 // Enhanced pad colors with glow effect
-                let (base_color, glow_color) = if let Ok(gui_data) = self.gui_data.lock()
-                    && gui_data.data.last_pad_pressed.is_some_and(|x| x == idx)
-                {
+                let (base_color, glow_color) = if last_pad_pressed == Some(idx) {
                     (
                         Color32::from_rgb(140, 60, 180),
                         Color32::from_rgba_premultiplied(180, 100, 220, 80),
@@ -127,8 +133,7 @@ impl AkaiVisualizer {
                     Color32::from_rgba_premultiplied(255, 255, 255, 180),
                 );
 
-                if let Ok(gui_data) = self.gui_data.lock()
-                    && let Some(label) = gui_data.data.pad_labels.get(idx as usize)
+                if let Some(label) = gui_data.data.pad_labels.get(idx as usize)
                     && !label.is_empty()
                 {
                     ui.painter().text(
@@ -141,6 +146,11 @@ impl AkaiVisualizer {
                 }
             }
         }
+        drop(gui_data);
+
+        if let Some(key) = clicked_pad {
+            self.send_command_to_backend(CommsCommand::PadPressed { key });
+        }
     }
 
     fn draw_knobs(&self, ui: &mut egui::Ui, rect: Rect, scale: f32) {
@@ -149,14 +159,23 @@ impl AkaiVisualizer {
         let start_x = 40.0f32.mul_add(scale, rect.min.x);
         let start_y = 340.0f32.mul_add(scale, rect.min.y);
 
+        let knob_values: [f32; 8] = self.gui_data.lock().map_or([0.5; 8], |gui_data| {
+            std::array::from_fn(|i| {
+                gui_data
+                    .data
+                    .knob_values
+                    .get(&(i as u8 + 1))
+                    .copied()
+                    .unwrap_or(0.5)
+            })
+        });
+
         for i in 0u8..8 {
             let x = f32::from(i).mul_add(knob_spacing, start_x);
             let y = start_y;
             let center = Pos2::new(x, y);
 
-            let current_value = self.gui_data.lock().map_or(0.5, |gui_data| {
-                *gui_data.data.knob_values.get(&(i + 1)).unwrap_or(&0.5f32)
-            });
+            let current_value = knob_values[usize::from(i)];
 
             ui.painter().circle_filled(
                 center,

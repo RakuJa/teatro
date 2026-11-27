@@ -11,20 +11,16 @@ use std::time::Duration;
 impl AkaiVisualizer {
     /// Returns (tracks as (`title`, `length_in_seconds`), `index` of current track)
     fn get_playlist_view(&self) -> Option<(Vec<(String, Duration)>, usize)> {
-        let playlist = self
-            .gui_data
-            .lock()
-            .ok()?
-            .data
-            .current_playlist
-            .as_ref()?
-            .clone();
+        let gui_data = self.gui_data.lock().ok()?;
+        let playlist = gui_data.data.current_playlist.as_ref()?;
         let tracks = playlist
             .tracks
             .iter()
             .map(|t| (title_from_path(&t.file_path), t.track_length))
             .collect();
-        Some((tracks, playlist.current_track as usize))
+        let current = playlist.current_track as usize;
+        drop(gui_data);
+        Some((tracks, current))
     }
 
     /// Floating panel that sits right above the player and lists every track in the album.

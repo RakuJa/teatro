@@ -7,12 +7,6 @@ pub struct PlaylistData {
     pub current_track: u64,
 }
 
-impl PlaylistData {
-    pub fn get_current_track(&self) -> Option<Track> {
-        self.tracks.get(self.current_track as usize).cloned()
-    }
-}
-
 #[bon]
 impl PlaylistData {
     #[builder]

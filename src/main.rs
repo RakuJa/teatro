@@ -22,7 +22,8 @@ use biquad::Type;
 use dotenvy::dotenv;
 use egui_tracing::tracing::collector::EventCollector;
 use egui_tracing::tracing_subscriber;
-use egui_tracing::tracing_subscriber::layer::SubscriberExt;
+use egui_tracing::tracing_subscriber::filter::LevelFilter;
+use egui_tracing::tracing_subscriber::layer::{Layer, SubscriberExt};
 use egui_tracing::tracing_subscriber::util::SubscriberInitExt;
 use flume::Sender;
 use gui::comms::command::CommsCommand;
@@ -45,15 +46,22 @@ pub struct MidiInputChannels {
     pub midi_in_pad: InputChannel,
 }
 
+const MAX_LOG_EVENTS: usize = 5_000;
+
+fn init_tracing() -> EventCollector {
+    let event_collector = EventCollector::default()
+        .with_max_events(Some(MAX_LOG_EVENTS))
+        .with_max_level(Level::INFO);
+    tracing_subscriber::registry()
+        .with(event_collector.clone().with_filter(LevelFilter::INFO))
+        .init();
+    event_collector
+}
+
 fn main() {
     dotenv().ok();
 
-    let event_collector = EventCollector::default()
-        .with_max_events(None)
-        .with_max_level(Level::INFO);
-    tracing_subscriber::registry()
-        .with(event_collector.clone())
-        .init();
+    let event_collector = init_tracing();
 
     let config_path = env::var("CONFIG_PATH").unwrap_or_else(|_| "config.yml".to_string());
 

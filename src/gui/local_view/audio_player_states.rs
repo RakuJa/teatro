@@ -6,7 +6,27 @@ pub struct PlayerInfo {
     pub(crate) last_refresh: Instant,
     pub(crate) refresh_interval: Duration,
     pub(crate) local_elapsed: Duration,
+    pub(crate) elapsed_synced_at: Instant,
     pub(crate) status: PlayerStatus,
+}
+
+impl PlayerInfo {
+    pub const fn is_playing(&self) -> bool {
+        !self.status.is_music_playable()
+    }
+
+    pub fn display_elapsed(&self, track_length: Duration) -> Duration {
+        let elapsed = if self.is_playing() {
+            self.local_elapsed + self.elapsed_synced_at.elapsed()
+        } else {
+            self.local_elapsed
+        };
+        if track_length.is_zero() {
+            elapsed
+        } else {
+            elapsed.min(track_length)
+        }
+    }
 }
 
 bitflags! {
@@ -70,8 +90,9 @@ impl Default for PlayerInfo {
     fn default() -> Self {
         Self {
             last_refresh: Instant::now(),
-            refresh_interval: Duration::from_millis(10),
+            refresh_interval: Duration::from_millis(250),
             local_elapsed: Duration::default(),
+            elapsed_synced_at: Instant::now(),
             status: PlayerStatus::default(),
         }
     }

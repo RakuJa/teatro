@@ -51,10 +51,8 @@ pub fn handle_watchdog(
         tx_data_watchdog,
     );
 
-    loop {
-        if let Ok(command) = rx_command.recv()
-            && matches!(command, CommsCommand::Refresh)
-        {
+    while let Ok(command) = rx_command.recv() {
+        if matches!(command, CommsCommand::Refresh) {
             if let Err(e) = hotwatch.unwatch(&last_folder) {
                 warn!("Error while unwatching folder: {e}");
             } else if let Ok(s) = settings_data.lock() {
@@ -72,4 +70,5 @@ pub fn handle_watchdog(
             );
         }
     }
+    warn!("Watchdog command channel closed. Music folder will not be refreshed anymore.");
 }

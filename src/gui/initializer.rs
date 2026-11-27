@@ -75,8 +75,9 @@ pub fn gui_initializer(
                 &data_path,
                 event_collector,
             )));
+            let sync_ctx = cc.egui_ctx.clone();
             std::thread::spawn(move || {
-                sync_gui_with_data_received_from_backend(&rx_data, &gui_data_sync);
+                sync_gui_with_data_received_from_backend(&rx_data, &gui_data_sync, &sync_ctx);
             });
             Ok(Box::new(GuiWrapper { state }))
         }),

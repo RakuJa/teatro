@@ -86,7 +86,6 @@ impl MidiHandler for PadHandler {
         {
             let x = Self::refresh(&data, &state.tx_data, &audio_sink);
             data.copy_data(x);
-            Self::update_gui(&state.tx_data, &data);
         }
     }
 }
