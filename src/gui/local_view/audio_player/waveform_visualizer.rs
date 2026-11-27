@@ -4,6 +4,7 @@ use eframe::epaint::Color32;
 
 impl AkaiVisualizer {
     // Waveform visualizer
+    #[expect(dead_code, reason = "temporarily disabled in `draw_player`")]
     pub(crate) fn draw_visualizer(
         ui: &egui::Ui,
         player_rect: Rect,

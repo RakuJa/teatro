@@ -81,7 +81,7 @@ pub fn enqueue(
     }
 
     Ok(Track::builder()
-        .track_length(track_length)
+        .maybe_track_length(track_length)
         .file_path(path)
         .build())
 }

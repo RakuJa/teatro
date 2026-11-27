@@ -3,10 +3,20 @@ use crate::states::knob_value_update::KnobValueUpdate;
 #[derive(Debug, Copy, Clone)]
 pub enum CommsCommand {
     Refresh,
-    PadPressed { key: u8 },
-    WhiteKeyPressed { key: u8 },
-    BlackKeyPressed { key: u8 },
-    KnobPercentageChanged { knob: u8, value: KnobValueUpdate },
+    PadPressed {
+        key: u8,
+    },
+    WhiteKeyPressed {
+        key: u8,
+    },
+    BlackKeyPressed {
+        key: u8,
+    },
+    KnobPercentageChanged {
+        knob: u8,
+        value: KnobValueUpdate,
+    },
+    #[expect(dead_code, reason = "no loop toggle in the GUI yet")]
     LoopPressed,
     ShufflePressed,
     SkipTrackPressed,
@@ -14,6 +24,10 @@ pub enum CommsCommand {
     PausePressed,
     StopAllPressed,
     SoloPressed,
-    PlayTrackPressed { index: usize },
-    SeekTo { target: f32 },
+    PlayTrackPressed {
+        index: usize,
+    },
+    SeekTo {
+        target: f32,
+    },
 }

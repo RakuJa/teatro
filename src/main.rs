@@ -29,7 +29,7 @@ use flume::Sender;
 use gui::comms::command::CommsCommand;
 use ramidier::io::input::InputChannel;
 use ramidier::io::output::ChannelOutput;
-use rodio::Player;
+use rodio::{MixerDeviceSink, Player};
 use std::env;
 use std::sync::{Arc, Mutex, PoisonError};
 use tracing::Level;
@@ -89,30 +89,8 @@ fn main() {
     let (gui_command_tx, gui_command_rx) = flume::unbounded::<CommsCommand>();
     let (watchgod_tx, watchdog_rx) = flume::unbounded::<CommsCommand>();
 
-    let stream_handle = rodio::DeviceSinkBuilder::open_default_sink()
-        .expect("Audio stream should be writable and readable");
-
-    let engine = Engine::new();
-
-    let music_queue = Player::connect_new(engine.mixer());
-    let ambience_queue = Player::connect_new(engine.mixer());
-    let sound_effect_queue = Player::connect_new(engine.mixer());
-
-    let output = Output::new(&engine).with(LocalBackend::new(&engine, stream_handle.mixer()));
-    let audio = AudioController::install(engine, output);
-    audio.apply(
-        &audio_settings
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner),
-    );
-
-    let states = prepare_audio_states(
-        music_queue,
-        ambience_queue,
-        sound_effect_queue,
-        hw_data,
-        &tx_data,
-    );
+    // The device sink must stay alive for the whole run, otherwise audio stops.
+    let (_stream_handle, states) = init_audio(&audio_settings, hw_data, &tx_data);
 
     cfg_if::cfg_if! {
         if #[cfg(all(feature = "midi", not(feature = "gui")))] {
@@ -164,7 +142,7 @@ fn main() {
                 &gui_tx_data,
                 &music_state,
                 &sound_state,
-                midi_out_channels,
+                midi_out_channels.as_ref(),
             );
         });
 
@@ -187,6 +165,35 @@ fn main() {
         )
         .expect("Application did not complete run correctly");
     }
+}
+
+/// Opens the audio device, installs the global `AudioController` and builds the audio states.
+fn init_audio(
+    settings: &Mutex<SettingsData>,
+    hw_data: Arc<Mutex<RuntimeData>>,
+    tx_data: &Sender<RuntimeData>,
+) -> (MixerDeviceSink, (MusicState, SoundState)) {
+    let stream_handle = rodio::DeviceSinkBuilder::open_default_sink()
+        .expect("Audio stream should be writable and readable");
+
+    let engine = Engine::new();
+
+    let music_queue = Player::connect_new(engine.mixer());
+    let ambience_queue = Player::connect_new(engine.mixer());
+    let sound_effect_queue = Player::connect_new(engine.mixer());
+
+    let output = Output::new(&engine).with(LocalBackend::new(&engine, stream_handle.mixer()));
+    let audio = AudioController::install(engine, output);
+    audio.apply(&settings.lock().unwrap_or_else(PoisonError::into_inner));
+
+    let states = prepare_audio_states(
+        music_queue,
+        ambience_queue,
+        sound_effect_queue,
+        hw_data,
+        tx_data,
+    );
+    (stream_handle, states)
 }
 
 fn prepare_audio_states(
@@ -220,7 +227,6 @@ fn prepare_audio_states(
             audio_sinks,
             ambience_filter,
             sound_effect_filter,
-            tx_data: tx_data.clone(),
         },
     )
 }

@@ -12,6 +12,8 @@ use ramidier::enums::button::knob_ctrl::KnobCtrlKey;
 use ramidier::enums::button::pads::PadKey;
 use ramidier::enums::button::soft_keys::SoftKey;
 use ramidier::enums::input_group::{KeyboardInputGroup, PadsAndKnobsInputGroup};
+use ramidier::io::output::ChannelOutput;
+use std::sync::MutexGuard;
 use tracing::{debug, warn};
 
 pub fn handle_gui_command_and_relay_them_to_backend(
@@ -20,13 +22,10 @@ pub fn handle_gui_command_and_relay_them_to_backend(
     tx_data: &Sender<RuntimeData>,
     music_state: &MusicState,
     sound_state: &SoundState,
-    midi_out_channel: Option<MidiOutputChannels>,
+    midi_out_channel: Option<&MidiOutputChannels>,
 ) {
     while let Ok(command) = rx_command.recv() {
         debug!("{command:?}");
-        let mut out_channel = midi_out_channel
-            .as_ref()
-            .and_then(|out| out.midi_out.lock().ok());
         match command {
             CommsCommand::Refresh => {
                 if let Ok(audio_sink) = music_state.audio_sinks.lock()
@@ -37,8 +36,8 @@ pub fn handle_gui_command_and_relay_them_to_backend(
             }
             CommsCommand::PadPressed { key } => {
                 if let Ok(padkey) = PadKey::try_from(key) {
-                    PadHandler::handle_input_pressed(
-                        out_channel.as_deref_mut(),
+                    press(
+                        midi_out_channel,
                         PadsAndKnobsInputGroup::Pads(padkey),
                         1,
                         music_state,
@@ -52,27 +51,28 @@ pub fn handle_gui_command_and_relay_them_to_backend(
                 KeyboardHandler::handle_input(KeyboardInputGroup::Key(key), sound_state);
             }
             CommsCommand::KnobPercentageChanged { knob, value } => {
-                PadHandler::handle_input_pressed(
-                    out_channel.as_deref_mut(),
+                press(
+                    midi_out_channel,
                     PadsAndKnobsInputGroup::Knob(knob),
                     value.into(),
                     music_state,
                 );
                 refresh_backend(tx_command);
             }
-            CommsCommand::ShufflePressed => PadHandler::handle_input_pressed(
-                out_channel.as_deref_mut(),
+            CommsCommand::ShufflePressed => press(
+                midi_out_channel,
                 PadsAndKnobsInputGroup::KnobCtrl(KnobCtrlKey::Send),
                 1,
                 music_state,
             ),
-            CommsCommand::LoopPressed => PadHandler::handle_input_pressed(
-                out_channel.as_deref_mut(),
+            CommsCommand::LoopPressed => press(
+                midi_out_channel,
                 PadsAndKnobsInputGroup::SoftKeys(SoftKey::Select),
                 1,
                 music_state,
             ),
             CommsCommand::SkipTrackPressed => {
+                let mut out_channel = lock_midi_out(midi_out_channel);
                 PadHandler::handle_input_pressed(
                     out_channel.as_deref_mut(),
                     PadsAndKnobsInputGroup::Right,
@@ -86,26 +86,26 @@ pub fn handle_gui_command_and_relay_them_to_backend(
                     music_state,
                 );
             }
-            CommsCommand::MutePressed => PadHandler::handle_input_pressed(
-                out_channel.as_deref_mut(),
+            CommsCommand::MutePressed => press(
+                midi_out_channel,
                 PadsAndKnobsInputGroup::SoftKeys(SoftKey::Mute),
                 1,
                 music_state,
             ),
-            CommsCommand::PausePressed => PadHandler::handle_input_pressed(
-                out_channel.as_deref_mut(),
+            CommsCommand::PausePressed => press(
+                midi_out_channel,
                 PadsAndKnobsInputGroup::SoftKeys(SoftKey::ClipStop),
                 1,
                 music_state,
             ),
-            CommsCommand::StopAllPressed => PadHandler::handle_input_pressed(
-                out_channel.as_deref_mut(),
+            CommsCommand::StopAllPressed => press(
+                midi_out_channel,
                 PadsAndKnobsInputGroup::StopAllClips,
                 1,
                 music_state,
             ),
-            CommsCommand::SoloPressed => PadHandler::handle_input_pressed(
-                out_channel.as_deref_mut(),
+            CommsCommand::SoloPressed => press(
+                midi_out_channel,
                 PadsAndKnobsInputGroup::SoftKeys(SoftKey::Solo),
                 1,
                 music_state,
@@ -118,10 +118,29 @@ pub fn handle_gui_command_and_relay_them_to_backend(
                 ExtraMidiHandler::handle_input(ExtraMidiGroup::SeekTo(target), music_state);
                 refresh_backend(tx_command);
             }
-            _ => warn!("Unsupported command: {command:?}"),
         }
     }
     warn!("GUI command channel closed. Backend will not receive GUI commands anymore.");
+}
+
+fn lock_midi_out(
+    midi_out_channel: Option<&MidiOutputChannels>,
+) -> Option<MutexGuard<'_, ChannelOutput>> {
+    midi_out_channel.and_then(|out| out.midi_out.lock().ok())
+}
+
+fn press(
+    midi_out_channel: Option<&MidiOutputChannels>,
+    input_group: PadsAndKnobsInputGroup,
+    value: u8,
+    music_state: &MusicState,
+) {
+    PadHandler::handle_input_pressed(
+        lock_midi_out(midi_out_channel).as_deref_mut(),
+        input_group,
+        value,
+        music_state,
+    );
 }
 
 fn refresh_backend(tx_command: &Sender<CommsCommand>) {

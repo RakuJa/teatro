@@ -67,10 +67,6 @@ impl Output {
         Some(removed)
     }
 
-    pub fn is_available(&self, kind: OutputKind) -> bool {
-        self.lock().iter().any(|b| b.kind() == kind)
-    }
-
     pub fn active(&self) -> OutputKind {
         self.selector.active()
     }
@@ -87,6 +83,7 @@ impl Output {
         for b in backends.iter().filter(|b| b.kind() != kind) {
             b.release();
         }
+        drop(backends);
         true
     }
 }

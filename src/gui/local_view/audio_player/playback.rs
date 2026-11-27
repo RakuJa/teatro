@@ -19,15 +19,6 @@ enum Icon {
     Next,
 }
 
-fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
-    let l = |x: u8, y: u8| {
-        (f32::from(y) - f32::from(x))
-            .mul_add(t, f32::from(x))
-            .round() as u8
-    };
-    Color32::from_rgb(l(a.r(), b.r()), l(a.g(), b.g()), l(a.b(), b.b()))
-}
-
 fn arc_points(center: Pos2, radius: f32, from_deg: f32, to_deg: f32, steps: usize) -> Vec<Pos2> {
     (0..=steps)
         .map(|i| {
@@ -98,22 +89,22 @@ fn paint_icon_next(painter: &Painter, c: Pos2, s: f32, color: Color32, scale: f3
 }
 
 fn paint_icon_shuffle(painter: &Painter, c: Pos2, s: f32, color: Color32, stroke: Stroke) {
-    let l = s * 0.95;
-    let a = Pos2::new(c.x - l, s.mul_add(-0.55, c.y));
-    let b = Pos2::new(c.x - l, s.mul_add(0.55, c.y));
-    let a2 = Pos2::new(s.mul_add(-0.3, c.x + l), s.mul_add(0.55, c.y));
-    let b2 = Pos2::new(s.mul_add(-0.3, c.x + l), s.mul_add(-0.55, c.y));
-    painter.line_segment([a, a2], stroke);
-    painter.line_segment([b, b2], stroke);
+    let half_width = s * 0.95;
+    let top_start = Pos2::new(c.x - half_width, s.mul_add(-0.55, c.y));
+    let bottom_start = Pos2::new(c.x - half_width, s.mul_add(0.55, c.y));
+    let bottom_end = Pos2::new(s.mul_add(-0.3, c.x + half_width), s.mul_add(0.55, c.y));
+    let top_end = Pos2::new(s.mul_add(-0.3, c.x + half_width), s.mul_add(-0.55, c.y));
+    painter.line_segment([top_start, bottom_end], stroke);
+    painter.line_segment([bottom_start, top_end], stroke);
     arrow_head(
         painter,
-        Pos2::new(s.mul_add(0.2, c.x + l), s.mul_add(0.55, c.y)),
+        Pos2::new(s.mul_add(0.2, c.x + half_width), s.mul_add(0.55, c.y)),
         s * 0.6,
         color,
     );
     arrow_head(
         painter,
-        Pos2::new(s.mul_add(0.2, c.x + l), s.mul_add(-0.55, c.y)),
+        Pos2::new(s.mul_add(0.2, c.x + half_width), s.mul_add(-0.55, c.y)),
         s * 0.6,
         color,
     );
@@ -198,20 +189,11 @@ fn paint_icon(painter: &Painter, icon: Icon, c: Pos2, s: f32, color: Color32, sc
     }
 }
 
-fn toggle_button(
-    ui: &egui::Ui,
-    rect: Rect,
-    id: &str,
-    icon: Icon,
-    active: bool,
-    accent: Color32,
-    tooltip: &str,
-    scale: f32,
-) -> Response {
+fn toggle_button(ui: &egui::Ui, rect: Rect, spec: &ToggleSpec, scale: f32) -> Response {
     let response = ui
-        .interact(rect, ui.id().with(id), Sense::click())
+        .interact(rect, ui.id().with(spec.id), Sense::click())
         .on_hover_cursor(CursorIcon::PointingHand)
-        .on_hover_text(tooltip);
+        .on_hover_text(spec.tooltip);
 
     let pressed = response.is_pointer_button_down_on();
     let base = if pressed {
@@ -225,15 +207,15 @@ fn toggle_button(
     let rounding = 6.0 * scale;
     let painter = ui.painter();
 
-    let icon_color = if active {
-        painter.rect_filled(rect, rounding, accent);
+    let icon_color = if spec.active {
+        painter.rect_filled(rect, rounding, spec.accent);
         let ring = 1.5 * scale;
         painter.rect_filled(
             rect.shrink(ring),
             (rounding - ring).max(0.0),
-            mix(base, accent, 0.22),
+            base.lerp_to_gamma(spec.accent, 0.22),
         );
-        mix(accent, Color32::WHITE, 0.35)
+        spec.accent.lerp_to_gamma(Color32::WHITE, 0.35)
     } else {
         painter.rect_filled(rect, rounding, base);
         if response.hovered() {
@@ -243,33 +225,44 @@ fn toggle_button(
         }
     };
 
-    paint_icon(painter, icon, rect.center(), 6.5 * scale, icon_color, scale);
+    paint_icon(
+        painter,
+        spec.icon,
+        rect.center(),
+        6.5 * scale,
+        icon_color,
+        scale,
+    );
     response
+}
+
+struct RoundSpec {
+    id: &'static str,
+    icon: Icon,
+    icon_half_size: f32,
+    primary: bool,
+    tooltip: &'static str,
 }
 
 fn round_button(
     ui: &egui::Ui,
     center: Pos2,
     diameter: f32,
-    id: &str,
-    icon: Icon,
-    icon_half_size: f32,
-    primary: bool,
-    tooltip: &str,
+    spec: &RoundSpec,
     scale: f32,
 ) -> Response {
     let rect = Rect::from_center_size(center, Vec2::splat(diameter));
     let response = ui
-        .interact(rect, ui.id().with(id), Sense::click())
+        .interact(rect, ui.id().with(spec.id), Sense::click())
         .on_hover_cursor(CursorIcon::PointingHand)
-        .on_hover_text(tooltip);
+        .on_hover_text(spec.tooltip);
 
     let pressed = response.is_pointer_button_down_on();
     let hovered = response.hovered();
     let radius = diameter / 2.0 - if pressed { 1.0 * scale } else { 0.0 };
     let painter = ui.painter();
 
-    let (fill, icon_color) = if primary {
+    let (fill, icon_color) = if spec.primary {
         let fill = if pressed {
             palette::PRIMARY_PRESSED
         } else if hovered {
@@ -295,7 +288,14 @@ fn round_button(
     };
 
     painter.circle_filled(center, radius, fill);
-    paint_icon(painter, icon, center, icon_half_size, icon_color, scale);
+    paint_icon(
+        painter,
+        spec.icon,
+        center,
+        spec.icon_half_size,
+        icon_color,
+        scale,
+    );
     response
 }
 
@@ -384,17 +384,7 @@ impl AkaiVisualizer {
 
         for (i, spec) in toggles.iter().enumerate() {
             let rect = layout.toggle_rect(player_rect, content_padding, i);
-            let response = toggle_button(
-                ui,
-                rect,
-                spec.id,
-                spec.icon,
-                spec.active,
-                spec.accent,
-                spec.tooltip,
-                scale,
-            );
-            if response.clicked() {
+            if toggle_button(ui, rect, spec, scale).clicked() {
                 self.toggle_and_send(spec.flag, spec.command);
             }
         }
@@ -425,11 +415,13 @@ impl AkaiVisualizer {
             ui,
             play_center,
             layout.play_diameter,
-            "pause_btn",
-            if paused { Icon::Play } else { Icon::Pause },
-            8.5 * scale,
-            true,
-            if paused { "Play" } else { "Pause" },
+            &RoundSpec {
+                id: "pause_btn",
+                icon: if paused { Icon::Play } else { Icon::Pause },
+                icon_half_size: 8.5 * scale,
+                primary: true,
+                tooltip: if paused { "Play" } else { "Pause" },
+            },
             scale,
         );
         if play_response.clicked() {
@@ -440,11 +432,13 @@ impl AkaiVisualizer {
             ui,
             skip_center,
             layout.skip_diameter,
-            "skip_btn",
-            Icon::Next,
-            6.5 * scale,
-            false,
-            "Next track",
+            &RoundSpec {
+                id: "skip_btn",
+                icon: Icon::Next,
+                icon_half_size: 6.5 * scale,
+                primary: false,
+                tooltip: "Next track",
+            },
             scale,
         );
         if skip_response.clicked() {

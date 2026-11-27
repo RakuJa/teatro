@@ -80,10 +80,6 @@ impl AudioController {
         })
     }
 
-    pub fn active(&self) -> OutputKind {
-        self.output.active()
-    }
-
     pub fn apply(self: &Arc<Self>, s: &SettingsData) {
         info!("Applying audio settings: output={:?}", s.audio_output);
 
@@ -144,18 +140,17 @@ impl AudioController {
 
             match result {
                 Ok(Ok(handle)) => {
-                    let stale = {
-                        let st = this.state.lock().unwrap_or_else(PoisonError::into_inner);
-                        if st.generation == generation {
-                            this.output.add(handle);
-                            this.output.use_output(st.desired);
-                            info!("Discord output ready");
-                            None
-                        } else {
-                            Some(handle)
-                        }
-                    };
-                    drop(stale);
+                    let st = this.state.lock().unwrap_or_else(PoisonError::into_inner);
+                    if st.generation == generation {
+                        this.output.add(handle);
+                        this.output.use_output(st.desired);
+                        drop(st);
+                        info!("Discord output ready");
+                    } else {
+                        // Stale connection: release the lock before tearing it down.
+                        drop(st);
+                        drop(handle);
+                    }
                 }
                 Ok(Err(e)) => {
                     warn!("Discord output unavailable: {e}");

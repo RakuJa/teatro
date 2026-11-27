@@ -18,15 +18,15 @@ impl Tap {
         self.buf.clear();
         self.pos = 0;
         if self.selector.active() == self.kind {
-            let mut master = self
-                .master
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            self.buf.extend(master.by_ref().take(CHUNK));
-            self.buf.resize(CHUNK, 0.);
-        } else {
-            self.buf.resize(CHUNK, 0.);
+            self.buf.extend(
+                self.master
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .by_ref()
+                    .take(CHUNK),
+            );
         }
+        self.buf.resize(CHUNK, 0.);
     }
 }
 
@@ -47,7 +47,7 @@ impl Source for Tap {
         None
     }
     fn channels(&self) -> ChannelCount {
-        ChannelCount::new(OUT_CHANNELS as u16).unwrap()
+        ChannelCount::new(OUT_CHANNELS as u16).expect("OUT CHANNELS should be different from 0")
     }
     fn sample_rate(&self) -> SampleRate {
         SampleRate::new(OUT_RATE).expect("OUT RATE should be different from 0")

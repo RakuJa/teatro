@@ -30,12 +30,12 @@ impl Track {
     #[builder]
     pub fn new(
         file_path: &str,
-        track_length: Option<Option<Duration>>,
+        track_length: Option<Duration>,
         current_position: Option<Duration>,
     ) -> Self {
         Self {
             file_path: file_path.to_string(),
-            track_length: track_length.unwrap_or_default().unwrap_or_default(),
+            track_length: track_length.unwrap_or_default(),
             elapsed_time: current_position.unwrap_or_default(),
         }
     }
