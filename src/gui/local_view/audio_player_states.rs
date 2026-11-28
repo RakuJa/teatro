@@ -61,6 +61,10 @@ impl PlayerStatus {
         self.contains(Self::SHUFFLE)
     }
 
+    pub const fn is_loop_enabled(self) -> bool {
+        self.contains(Self::LOOP)
+    }
+
     pub const fn is_music_muted(self) -> bool {
         self.contains(Self::MUTE_ALL)
     }

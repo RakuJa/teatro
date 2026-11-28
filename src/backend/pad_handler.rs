@@ -61,6 +61,7 @@ impl MidiHandler for PadHandler {
                 current_playlist: Some(Self::current_playlist_state(
                     playlist.clone(),
                     &audio_sinks.music_queue,
+                    audio_sinks.music_loop.time_spent_in_loop(),
                 )),
             },
         );
@@ -252,7 +253,13 @@ impl PadHandler {
         }
 
         let playlist = if let Ok(sinks) = state.audio_sinks.lock() {
-            let x = Self::add_playlist(&files, &sinks.music_queue, &state.music_filter, volume);
+            let x = Self::add_playlist(
+                &files,
+                &sinks.music_queue,
+                &state.music_filter,
+                Some(&sinks.music_loop),
+                volume,
+            );
             sinks.music_queue.play();
             x
         } else {
@@ -335,6 +342,25 @@ impl PadHandler {
         }
     }
 
+    fn toggle_loop(state: &MusicState, midi_out: Option<&mut ChannelOutput>) {
+        let Ok(mut data) = state.data.lock() else {
+            warn!("Failed to get data lock, cannot toggle loop");
+            return;
+        };
+        data.button_states.toggle_button(
+            ToggleStates::SELECT,
+            midi_out,
+            SoftKey::Select,
+            LedColor::Green,
+        );
+        let enabled = data.button_states.contains(ToggleStates::SELECT);
+        if let Ok(sinks) = state.audio_sinks.lock() {
+            sinks.music_loop.set_enabled(enabled);
+        } else {
+            warn!("Failed to get audio sink lock, cannot toggle loop");
+        }
+    }
+
     fn handle_soft_key(key: SoftKey, state: &MusicState, midi_out: Option<&mut ChannelOutput>) {
         match key {
             SoftKey::Mute => {
@@ -413,7 +439,8 @@ impl PadHandler {
                     warn!("Failed to get audio sink lock, cannot mute song");
                 }
             }
-            _ => {
+            SoftKey::Select => Self::toggle_loop(state, midi_out),
+            SoftKey::RecArm => {
                 if let Ok(mut data) = state.data.lock() {
                     data.button_states.toggle_button(
                         ToggleStates::from(key),

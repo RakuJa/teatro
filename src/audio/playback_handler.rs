@@ -1,5 +1,6 @@
 use crate::FilterData;
 use crate::audio::audio_filter::FilteredSource;
+use crate::audio::looping_source::{LoopControl, LoopingSource};
 use crate::backend::errors::PlaybackError;
 use crate::states::playlist_data::Track;
 use rodio::{Player, Source};
@@ -50,11 +51,14 @@ pub fn increase_volume(sink: &Player, value: f32) -> f32 {
 /// the track is wrapped in a `FilteredSource`. if the
 /// filter lock can't be taken, the track is queued unfiltered.
 ///
+/// With `looping`, the track repeats while that control is enabled.
+///
 /// This does not start playback.
 pub fn enqueue(
     sink: &Player,
     path: &str,
     filter: Option<&FilterData>,
+    looping: Option<&LoopControl>,
 ) -> Result<Track, PlaybackError> {
     let file = std::fs::File::open(path).map_err(|source| PlaybackError::Open {
         path: path.to_owned(),
@@ -66,15 +70,30 @@ pub fn enqueue(
     })?;
     let track_length = source.total_duration();
 
-    match filter {
-        Some(f) => sink.append(FilteredSource::new(source, f.clone())),
-        None => sink.append(source),
+    // The loop sits inside the filter so the filter state carries across the loop.
+    match looping {
+        Some(control) => append_filtered(
+            sink,
+            LoopingSource::new(source, path.to_owned(), control.clone()),
+            filter,
+        ),
+        None => append_filtered(sink, source, filter),
     }
 
     Ok(Track::builder()
         .maybe_track_length(track_length)
         .file_path(path)
         .build())
+}
+
+fn append_filtered<S>(sink: &Player, source: S, filter: Option<&FilterData>)
+where
+    S: Source<Item = f32> + Send + 'static,
+{
+    match filter {
+        Some(f) => sink.append(FilteredSource::new(source, f.clone())),
+        None => sink.append(source),
+    }
 }
 
 pub fn current_track_index(sink: &Player, total: usize) -> usize {
@@ -89,6 +108,7 @@ pub fn go_to_track(
     tracks: &[Track],
     target_idx: usize,
     filter: Option<&FilterData>,
+    looping: Option<&LoopControl>,
 ) -> Result<(), PlaybackError> {
     if target_idx >= tracks.len() {
         return Err(PlaybackError::TrackOutOfRange {
@@ -101,7 +121,7 @@ pub fn go_to_track(
     sink.clear();
 
     for track in &tracks[target_idx..] {
-        if let Err(e) = enqueue(sink, &track.file_path, filter) {
+        if let Err(e) = enqueue(sink, &track.file_path, filter, looping) {
             warn!("Skipping {}: {e}", track.file_path);
         }
     }
@@ -129,6 +149,6 @@ pub fn remaining_tracks(sink: &Player) -> usize {
     sink.len()
 }
 
-pub fn track_elapsed_time(sink: &Player) -> Duration {
-    sink.get_pos()
+pub fn track_elapsed_time(sink: &Player, looped: Duration) -> Duration {
+    sink.get_pos().saturating_sub(looped)
 }

@@ -6,6 +6,7 @@ mod os_explorer;
 mod states;
 
 use crate::audio::audio_controller::AudioController;
+use crate::audio::looping_source::LoopControl;
 use crate::audio::output::Output;
 use crate::audio::output::engine::Engine;
 use crate::backend::audio::local::LocalBackend;
@@ -204,6 +205,7 @@ fn prepare_audio_states(
 ) -> (MusicState, SoundState) {
     let audio_sinks = Arc::new(Mutex::new(AudioSinks {
         music_queue,
+        music_loop: LoopControl::default(),
         ambience_queue,
         sound_effect_queue,
     }));

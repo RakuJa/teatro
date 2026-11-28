@@ -145,7 +145,7 @@ impl KeyboardHandler {
                 } else {
                     &audio_sinks.sound_effect_queue
                 };
-                Self::add_playlist(&[file_str.to_string()], queue, &filter, volume);
+                Self::add_playlist(&[file_str.to_string()], queue, &filter, None, volume);
                 if !data.button_states.is_toggled(ToggleStates::SOLO) {
                     queue.play();
                 }

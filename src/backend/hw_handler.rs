@@ -1,4 +1,5 @@
 use crate::FilterData;
+use crate::audio::looping_source::LoopControl;
 use crate::audio::playback_handler;
 use crate::states::audio_sinks::AudioSinks;
 use crate::states::playlist_data::{PlaylistData, Track};
@@ -31,7 +32,8 @@ pub trait MidiHandler {
     }
 
     /// Rebuilds the playlist state from the sink: which track is current and how far in it is.
-    fn current_playlist_state(old: PlaylistData, sink: &Player) -> PlaylistData {
+    /// `looped`: time spent in completed loop passes of the current track.
+    fn current_playlist_state(old: PlaylistData, sink: &Player, looped: Duration) -> PlaylistData {
         let current_track_number = old
             .tracks
             .len()
@@ -43,7 +45,7 @@ pub trait MidiHandler {
             .enumerate()
             .map(|(i, t)| Track {
                 elapsed_time: if i == current_track_number {
-                    playback_handler::track_elapsed_time(sink)
+                    playback_handler::track_elapsed_time(sink, looped)
                 } else {
                     Duration::default()
                 },
@@ -66,6 +68,7 @@ pub trait MidiHandler {
         files: &[String],
         sink: &Player,
         filter: &Arc<Mutex<FilterData>>,
+        looping: Option<&LoopControl>,
         volume: Option<f32>,
     ) -> Option<PlaylistData> {
         if files.is_empty() {
@@ -83,6 +86,7 @@ pub trait MidiHandler {
                     sink,
                     f,
                     filter.lock().map(|x| x.clone()).ok().as_ref(),
+                    looping,
                 ) {
                     Ok(t) => Some(t),
                     Err(e) => {

@@ -101,8 +101,13 @@ impl ExtraMidiHandler {
             return;
         };
         if let Ok(filter) = state.music_filter.lock()
-            && let Err(e) =
-                playback_handler::go_to_track(&sinks.music_queue, &tracks, index, Some(&*filter))
+            && let Err(e) = playback_handler::go_to_track(
+                &sinks.music_queue,
+                &tracks,
+                index,
+                Some(&*filter),
+                Some(&sinks.music_loop),
+            )
         {
             warn!("Cannot skip to track {index}: {e}");
             return;

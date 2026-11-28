@@ -22,6 +22,7 @@ pub mod palette {
     pub const ON_PRIMARY: Color32 = Color32::from_rgb(15, 20, 30);
 
     pub const SHUFFLE: Color32 = Color32::from_rgb(180, 100, 220);
+    pub const LOOP: Color32 = Color32::from_rgb(110, 200, 150);
     pub const MUTE: Color32 = Color32::from_rgb(220, 90, 90);
     pub const SOLO: Color32 = Color32::from_rgb(100, 180, 220);
     pub const STOP: Color32 = Color32::from_rgb(230, 100, 80);

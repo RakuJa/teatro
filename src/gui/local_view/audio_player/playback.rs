@@ -167,6 +167,15 @@ impl AkaiVisualizer {
                 command: CommsCommand::ShufflePressed {},
             },
             ToggleSpec {
+                id: "loop",
+                icon: Icon::Loop,
+                active: current_status.is_loop_enabled(),
+                accent: palette::LOOP,
+                tooltip: "Loop current song (controller: Select)",
+                flag: PlayerStatus::LOOP,
+                command: CommsCommand::LoopPressed {},
+            },
+            ToggleSpec {
                 id: "mute",
                 icon: if muted {
                     Icon::SpeakerMuted

@@ -27,6 +27,7 @@ pub enum Icon {
     Play,
     Pause,
     Next,
+    Loop,
 }
 
 struct Canvas {
@@ -185,6 +186,16 @@ pub fn paint(painter: &Painter, icon: Icon, rect: Rect, color: Color32) {
             c.filled(painter, &[(0.188, 0.229), (0.188, 0.771), (0.646, 0.5)]);
             c.rect_filled(painter, (0.688, 0.229), (0.833, 0.771), 0.02);
         }
+        Icon::Loop => {
+            // Top left side arrow pointing right.
+            c.line(painter, &[(0.16, 0.56), (0.16, 0.3), (0.7, 0.3)]);
+            c.filled(painter, &[(0.88, 0.3), (0.7, 0.16), (0.7, 0.44)]);
+            // Bottom right side arrow pointing left.
+            c.line(painter, &[(0.84, 0.44), (0.84, 0.7), (0.3, 0.7)]);
+            c.filled(painter, &[(0.12, 0.7), (0.3, 0.56), (0.3, 0.84)]);
+            // A small "1" in the middle.
+            c.line(painter, &[(0.45, 0.45), (0.51, 0.4), (0.51, 0.6)]);
+        }
     }
 }
 
@@ -276,7 +287,7 @@ pub fn icon_label(ui: &mut Ui, icon: Icon, text: impl Into<String>, size: f32, c
 #[cfg(test)]
 mod tests {
     use super::*;
-    const ALL: [Icon; 20] = [
+    const ALL: [Icon; 21] = [
         Icon::Keys,
         Icon::Globe,
         Icon::Gear,
@@ -297,6 +308,7 @@ mod tests {
         Icon::Play,
         Icon::Pause,
         Icon::Next,
+        Icon::Loop,
     ];
 
     #[expect(dead_code, reason = "compile-time check only")]
@@ -321,7 +333,8 @@ mod tests {
             | Icon::Stop
             | Icon::Play
             | Icon::Pause
-            | Icon::Next => {}
+            | Icon::Next
+            | Icon::Loop => {}
         }
     }
 
