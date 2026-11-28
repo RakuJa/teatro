@@ -1,245 +1,18 @@
+use crate::gui::icons::{self, Icon};
+use crate::gui::theme;
 use crate::gui::ui::AkaiVisualizer;
 use crate::states::information_data::InformationEntry;
-use eframe::emath::Rect;
-use eframe::epaint::Color32;
-use egui::{Frame, Pos2, RichText, ScrollArea, Vec2};
+use egui::{
+    Align, Button, Color32, CursorIcon, Frame, Key, Label, Layout, Margin, RichText, ScrollArea,
+    Sense, Stroke, TextEdit, Ui, Vec2,
+};
 use tracing::warn;
 
-struct IconButtonStyle {
-    size: Vec2,
-    enabled_bg: Color32,
-    enabled_bg_hover: Color32,
-    disabled_bg: Color32,
-    enabled_border: Color32,
-    disabled_border: Color32,
-}
-
-impl IconButtonStyle {
-    fn new(scale: f32) -> Self {
-        Self {
-            size: egui::vec2(28.0 * scale, 20.0 * scale),
-            enabled_bg: Color32::from_rgb(60, 80, 120),
-            enabled_bg_hover: Color32::from_rgb(70, 90, 140),
-            disabled_bg: Color32::from_rgb(45, 45, 55),
-            enabled_border: Color32::from_rgb(100, 140, 220),
-            disabled_border: Color32::from_rgb(60, 60, 70),
-        }
-    }
-
-    fn delete_style(scale: f32) -> Self {
-        Self {
-            size: egui::vec2(24.0 * scale, 24.0 * scale),
-            enabled_bg: Color32::from_rgb(120, 50, 50),
-            enabled_bg_hover: Color32::from_rgb(180, 60, 60),
-            disabled_bg: Color32::from_rgb(45, 45, 55),
-            enabled_border: Color32::from_rgb(200, 80, 80),
-            disabled_border: Color32::from_rgb(60, 60, 70),
-        }
-    }
-}
-
-#[derive(Copy, Clone)]
-enum ArrowDirection {
-    Up,
-    Down,
-}
-
-fn draw_arrow_button(
-    ui: &mut egui::Ui,
-    style: &IconButtonStyle,
-    direction: ArrowDirection,
-    enabled: bool,
-    scale: f32,
-) -> egui::Response {
-    let (rect, response) = ui.allocate_exact_size(style.size, egui::Sense::click());
-
-    if ui.is_rect_visible(rect) {
-        let _ = ui.style().interact(&response);
-        let bg_color = if enabled {
-            if response.hovered() {
-                style.enabled_bg_hover
-            } else {
-                style.enabled_bg
-            }
-        } else {
-            style.disabled_bg
-        };
-
-        ui.painter().rect_filled(rect, 4.0, bg_color);
-        let border_color = if enabled {
-            style.enabled_border
-        } else {
-            style.disabled_border
-        };
-
-        ui.painter().rect_stroke(
-            rect,
-            4.0,
-            egui::Stroke::new(1.0, border_color),
-            egui::epaint::StrokeKind::Outside,
-        );
-        let arrow_color = if enabled {
-            Color32::from_rgb(180, 200, 255)
-        } else {
-            Color32::from_rgb(80, 80, 90)
-        };
-
-        draw_arrow(ui, rect.center(), direction, 6.0 * scale, arrow_color);
-    }
-
-    response
-}
-
-fn draw_arrow(ui: &egui::Ui, center: Pos2, direction: ArrowDirection, size: f32, color: Color32) {
-    let points = match direction {
-        ArrowDirection::Up => {
-            let top = center + egui::vec2(0.0, -size / 2.0);
-            let bottom_left = center + egui::vec2(-size / 1.5, size / 2.0);
-            let bottom_right = center + egui::vec2(size / 1.5, size / 2.0);
-            vec![top, bottom_left, bottom_right]
-        }
-        ArrowDirection::Down => {
-            let bottom = center + egui::vec2(0.0, size / 2.0);
-            let top_left = center + egui::vec2(-size / 1.5, -size / 2.0);
-            let top_right = center + egui::vec2(size / 1.5, -size / 2.0);
-            vec![bottom, top_left, top_right]
-        }
-    };
-
-    ui.painter().add(egui::Shape::convex_polygon(
-        points,
-        color,
-        egui::Stroke::NONE,
-    ));
-}
-
-fn draw_delete_button(ui: &mut egui::Ui, style: &IconButtonStyle, scale: f32) -> egui::Response {
-    let (rect, response) = ui.allocate_exact_size(style.size, egui::Sense::click());
-
-    if ui.is_rect_visible(rect) {
-        let bg_color = if response.hovered() {
-            style.enabled_bg_hover
-        } else {
-            style.enabled_bg
-        };
-
-        ui.painter().rect_filled(rect, 4.0, bg_color);
-
-        ui.painter().rect_stroke(
-            rect,
-            4.0,
-            egui::Stroke::new(1.0, style.enabled_border),
-            egui::epaint::StrokeKind::Outside,
-        );
-
-        let center = rect.center();
-        let x_size = 8.0 * scale;
-        let x_color = Color32::from_rgb(255, 200, 200);
-
-        ui.painter().line_segment(
-            [
-                center + egui::vec2(-x_size / 2.0, -x_size / 2.0),
-                center + egui::vec2(x_size / 2.0, x_size / 2.0),
-            ],
-            egui::Stroke::new(2.0 * scale, x_color),
-        );
-
-        ui.painter().line_segment(
-            [
-                center + egui::vec2(x_size / 2.0, -x_size / 2.0),
-                center + egui::vec2(-x_size / 2.0, x_size / 2.0),
-            ],
-            egui::Stroke::new(2.0 * scale, x_color),
-        );
-    }
-
-    response.on_hover_text("Delete item")
-}
-
-fn draw_vertical_divider(ui: &egui::Ui) {
-    let divider_rect = Rect::from_min_size(ui.cursor().min, egui::vec2(1.5, ui.available_height()));
-    ui.painter()
-        .rect_filled(divider_rect, 1.0, Color32::from_rgb(80, 80, 95));
-}
-
-fn draw_item_controls(
-    ui: &mut egui::Ui,
-    index: usize,
-    total_items: usize,
-    scale: f32,
-) -> Vec<ListAction> {
-    let mut actions = vec![];
-    let style = IconButtonStyle::new(scale);
-
-    ui.vertical(|ui| {
-        ui.spacing_mut().item_spacing.y = 4.0;
-
-        let up_enabled = index > 0;
-        let up_response = draw_arrow_button(ui, &style, ArrowDirection::Up, up_enabled, scale);
-        if up_response.clicked() && up_enabled {
-            actions.push(ListAction::MoveUp(index));
-        }
-
-        let down_enabled = index < total_items - 1;
-        let down_response =
-            draw_arrow_button(ui, &style, ArrowDirection::Down, down_enabled, scale);
-        if down_response.clicked() && down_enabled {
-            actions.push(ListAction::MoveDown(index));
-        }
-    });
-
-    actions
-}
-
-fn draw_item_content(
-    ui: &mut egui::Ui,
-    index: usize,
-    text: &mut String,
-    is_editing: bool,
-    scale: f32,
-) -> Vec<ListAction> {
-    let mut actions = vec![];
-
-    if is_editing {
-        let edit_response = ui.add(
-            egui::TextEdit::singleline(text)
-                .desired_width(f32::INFINITY)
-                .font(egui::TextStyle::Body)
-                .text_color(Color32::from_rgb(240, 240, 250)),
-        );
-
-        if edit_response.lost_focus()
-            && (ui.input(|i| i.key_pressed(egui::Key::Enter))
-                || ui.input(|i| i.key_pressed(egui::Key::Escape)))
-        {
-            actions.push(ListAction::StopEditing);
-        }
-
-        edit_response.request_focus();
-    } else {
-        let label_response = ui.add(
-            egui::Label::new(
-                RichText::new(&*text)
-                    .color(Color32::from_rgb(220, 220, 235))
-                    .size(14.0 * scale),
-            )
-            .wrap()
-            .sense(egui::Sense::click()),
-        );
-
-        if label_response.double_clicked() {
-            actions.push(ListAction::StartEditing(index));
-        }
-
-        if label_response.hovered() {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-        }
-
-        label_response.on_hover_text("Double-click to edit");
-    }
-
-    actions
-}
+const ROW_CONTROLS_W: f32 = 74.0;
+const ICON_BUTTON_SIZE: f32 = 20.0;
+const INDEX_W: f32 = 20.0;
+const ROW_BG: Color32 = Color32::from_rgb(36, 36, 46);
+const ROW_BG_HOVER: Color32 = Color32::from_rgb(42, 42, 54);
 
 enum ListAction {
     MoveUp(usize),
@@ -247,208 +20,361 @@ enum ListAction {
     Delete(usize),
     StartEditing(usize),
     StopEditing,
+    Add(String),
 }
 
-fn draw_list_item(
-    ui: &mut egui::Ui,
-    index: usize,
-    text: &mut String,
-    is_editing: bool,
-    total_items: usize,
-    scale: f32,
-) -> Vec<ListAction> {
-    let mut actions = vec![];
+fn icon_button(
+    ui: &mut Ui,
+    icon: Icon,
+    tooltip: &str,
+    enabled: bool,
+    danger: bool,
+    row_hovered: bool,
+) -> bool {
+    let sense = if enabled {
+        Sense::click()
+    } else {
+        Sense::hover()
+    };
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(ICON_BUTTON_SIZE), sense);
+    let response = if enabled {
+        response
+            .on_hover_cursor(CursorIcon::PointingHand)
+            .on_hover_text(tooltip)
+    } else {
+        response
+    };
 
-    Frame::new()
-        .fill(if is_editing {
-            Color32::from_rgb(50, 50, 60)
-        } else {
-            Color32::from_rgb(40, 40, 50)
-        })
-        .stroke(egui::Stroke::new(
-            1.0,
-            if is_editing {
-                Color32::from_rgb(100, 150, 255)
+    let hovered = enabled && response.hovered();
+    let color = if !enabled {
+        theme::BORDER_STRONG
+    } else if hovered && danger {
+        theme::ERROR
+    } else if row_hovered {
+        theme::TEXT_HOVER
+    } else {
+        theme::TEXT_FAINT
+    };
+    if hovered {
+        ui.painter().rect_filled(
+            rect,
+            4.0,
+            if danger {
+                theme::ERROR.gamma_multiply(0.2)
             } else {
-                Color32::from_rgb(60, 60, 75)
+                Color32::from_white_alpha(14)
+            },
+        );
+    }
+    icons::paint(ui.painter(), icon, rect.shrink(4.0), color);
+    response.clicked()
+}
+
+fn draw_row(
+    ui: &mut Ui,
+    index: usize,
+    total: usize,
+    text: &mut String,
+    editing: bool,
+    focus_editor: &mut bool,
+) -> Vec<ListAction> {
+    let mut actions = Vec::new();
+    let row_id = ui.id().with(("tracker_row", index));
+    let was_hovered = ui.data(|d| d.get_temp::<bool>(row_id).unwrap_or(false));
+
+    let frame = Frame::new()
+        .fill(if was_hovered || editing {
+            ROW_BG_HOVER
+        } else {
+            ROW_BG
+        })
+        .stroke(Stroke::new(
+            1.0,
+            if editing {
+                theme::ACCENT
+            } else {
+                theme::BORDER
             },
         ))
-        .corner_radius(8.0)
-        .inner_margin(egui::vec2(12.0, 10.0))
+        .corner_radius(6)
+        .inner_margin(Margin::symmetric(8, 6))
         .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                actions.extend(draw_item_controls(ui, index, total_items, scale));
+            ui.set_width(ui.available_width());
+            ui.horizontal_top(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                ui.add_sized(
+                    Vec2::new(INDEX_W, 20.0),
+                    Label::new(
+                        RichText::new(format!("{}", index + 1))
+                            .size(12.0)
+                            .color(theme::TEXT_FAINT),
+                    ),
+                );
 
-                ui.add_space(10.0);
-                draw_vertical_divider(ui);
-                ui.add_space(10.0);
+                let text_w = (ui.available_width() - ROW_CONTROLS_W).max(40.0);
+                ui.allocate_ui_with_layout(
+                    Vec2::new(text_w, 0.0),
+                    Layout::top_down(Align::Min),
+                    |ui| {
+                        ui.set_width(text_w);
+                        if editing {
+                            let response = ui.add(
+                                TextEdit::multiline(text)
+                                    .desired_rows(1)
+                                    .desired_width(f32::INFINITY)
+                                    .background_color(theme::INPUT_BG)
+                                    .return_key(egui::KeyboardShortcut::new(
+                                        egui::Modifiers::SHIFT,
+                                        Key::Enter,
+                                    )),
+                            );
+                            if std::mem::take(focus_editor) {
+                                response.request_focus();
+                            }
+                            let enter =
+                                ui.input(|i| i.key_pressed(Key::Enter) && !i.modifiers.shift);
+                            if response.lost_focus() || (response.has_focus() && enter) {
+                                actions.push(ListAction::StopEditing);
+                            }
+                        } else {
+                            let response = ui
+                                .add(
+                                    Label::new(
+                                        RichText::new(text.as_str()).size(13.5).color(theme::TEXT),
+                                    )
+                                    .wrap()
+                                    .sense(Sense::click()),
+                                )
+                                .on_hover_cursor(CursorIcon::Text)
+                                .on_hover_text("Double-click to edit");
+                            if response.double_clicked() {
+                                actions.push(ListAction::StartEditing(index));
+                            }
+                        }
+                    },
+                );
 
-                ui.vertical(|ui| {
-                    actions.extend(draw_item_content(ui, index, text, is_editing, scale));
-                });
-
-                ui.add_space(10.0);
-
-                ui.vertical(|ui| {
-                    ui.add_space(2.0);
-                    let delete_style = IconButtonStyle::delete_style(scale);
-                    let delete_response = draw_delete_button(ui, &delete_style, scale);
-                    if delete_response.clicked() {
+                ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    if icon_button(ui, Icon::Trash, "Delete", true, true, was_hovered) {
                         actions.push(ListAction::Delete(index));
                     }
+                    if icon_button(
+                        ui,
+                        Icon::ArrowDown,
+                        "Move down",
+                        index + 1 < total,
+                        false,
+                        was_hovered,
+                    ) {
+                        actions.push(ListAction::MoveDown(index));
+                    }
+                    if icon_button(ui, Icon::ArrowUp, "Move up", index > 0, false, was_hovered) {
+                        actions.push(ListAction::MoveUp(index));
+                    }
                 });
             });
         });
 
+    let hovered = ui.rect_contains_pointer(frame.response.rect);
+    if hovered != was_hovered {
+        ui.data_mut(|d| d.insert_temp(row_id, hovered));
+        ui.ctx().request_repaint();
+    }
     actions
 }
+
 impl AkaiVisualizer {
-    pub(crate) fn draw_information_list(&mut self, ui: &mut egui::Ui, scale: f32) {
+    pub(crate) fn draw_information_list(&mut self, ui: &mut Ui) {
+        let mut actions = Vec::new();
+
         Frame::new()
-            .fill(Color32::from_rgb(25, 25, 30))
-            .stroke(egui::Stroke::new(1.5, Color32::from_rgb(70, 70, 85)))
-            .corner_radius(12.0)
-            .inner_margin(16.0)
-            .shadow(egui::epaint::Shadow {
-                offset: [0, 2],
-                blur: 8,
-                spread: 0,
-                color: Color32::from_black_alpha(40),
-            })
+            .fill(theme::CARD_BG)
+            .stroke(Stroke::new(1.0, theme::BORDER))
+            .corner_radius(10)
+            .inner_margin(Margin::same(14))
             .show(ui, |ui| {
-                ui.set_width(280.0 * scale);
+                ui.set_width(ui.available_width());
+                ui.set_min_height(ui.available_height());
 
-                Self::draw_header(ui, scale);
+                self.draw_tracker_header(ui);
+                ui.add_space(10.0);
+                actions.extend(self.draw_add_row(ui));
+                ui.add_space(10.0);
 
-                let mut actions = vec![];
+                if self.info_panel_data.information_list.is_empty() {
+                    ui.add_space(24.0);
+                    ui.vertical_centered(|ui| {
+                        ui.label(
+                            RichText::new("Nothing tracked yet")
+                                .size(13.5)
+                                .color(theme::TEXT_MUTED),
+                        );
+                        ui.label(
+                            RichText::new("Initiative order, NPC names, loot...")
+                                .size(12.0)
+                                .color(theme::TEXT_FAINT),
+                        );
+                    });
+                    return;
+                }
 
                 ScrollArea::vertical()
-                    .max_height(400.0 * scale)
+                    .auto_shrink([false, false])
                     .show(ui, |ui| {
-                        let list_length = self.info_panel_data.information_list.len();
-                        for i in 0..list_length {
-                            let is_editing = self.info_panel_data.editing_index == Some(i);
-
-                            actions.extend(draw_list_item(
+                        ui.spacing_mut().item_spacing.y = 6.0;
+                        let data = &mut self.info_panel_data;
+                        let total = data.information_list.len();
+                        for i in 0..total {
+                            let editing = data.editing_index == Some(i);
+                            actions.extend(draw_row(
                                 ui,
                                 i,
-                                &mut self.info_panel_data.information_list[i],
-                                is_editing,
-                                list_length,
-                                scale,
+                                total,
+                                &mut data.information_list[i],
+                                editing,
+                                &mut data.focus_editor,
                             ));
-
-                            ui.add_space(8.0);
                         }
                     });
-
-                ui.add_space(12.0);
-
-                self.draw_add_button(ui, scale);
-
-                if self.apply_list_actions(actions) {
-                    let info = self
-                        .info_panel_data
-                        .information_list
-                        .iter()
-                        .enumerate()
-                        .map(|(i, s)| InformationEntry {
-                            position: i,
-                            data: s.clone(),
-                        })
-                        .collect();
-                    if let Err(e) =
-                        InformationEntry::write_to_file(&self.info_panel_data.data_file_path, &info)
-                    {
-                        warn!("Failed to write data to file: {e}");
-                    }
-                }
             });
-    }
 
-    fn draw_header(ui: &mut egui::Ui, scale: f32) {
-        ui.horizontal(|ui| {
-            ui.label(
-                RichText::new("Information Tracker")
-                    .size(18.0 * scale)
-                    .strong()
-                    .color(Color32::from_rgb(230, 230, 240)),
-            );
-        });
-
-        ui.add_space(4.0);
-        ui.separator();
-        ui.add_space(8.0);
-    }
-
-    fn draw_add_button(&mut self, ui: &mut egui::Ui, scale: f32) {
-        let add_button = ui.add(
-            egui::Button::new(
-                RichText::new("+ Add New Item")
-                    .size(14.0 * scale)
-                    .color(Color32::from_rgb(200, 220, 255)),
-            )
-            .fill(Color32::from_rgb(50, 80, 120))
-            .stroke(egui::Stroke::new(1.0, Color32::from_rgb(100, 140, 220)))
-            .corner_radius(6.0)
-            .min_size(egui::vec2(ui.available_width(), 32.0 * scale)),
-        );
-
-        if add_button.clicked() {
-            let new_pos = self.info_panel_data.information_list.len();
-            self.info_panel_data
-                .information_list
-                .push(String::from("New Item"));
-            self.info_panel_data.editing_index = Some(new_pos);
+        if self.apply_list_actions(actions) {
+            self.persist_information_list();
         }
     }
 
+    fn draw_tracker_header(&self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
+            ui.label(
+                RichText::new("Information tracker")
+                    .size(16.0)
+                    .strong()
+                    .color(theme::TEXT),
+            );
+            let count = self.info_panel_data.information_list.len();
+            if count > 0 {
+                ui.label(
+                    RichText::new(count.to_string())
+                        .size(12.0)
+                        .color(theme::TEXT_FAINT),
+                );
+            }
+        });
+        ui.label(
+            RichText::new("Double-click an entry to edit it. Saved automatically.")
+                .size(11.5)
+                .color(theme::TEXT_FAINT),
+        );
+    }
+
+    fn draw_add_row(&mut self, ui: &mut Ui) -> Option<ListAction> {
+        let height = 28.0;
+        ui.allocate_ui_with_layout(
+            Vec2::new(ui.available_width(), height),
+            Layout::right_to_left(Align::Center),
+            |ui| {
+                let can_add = !self.info_panel_data.new_entry.trim().is_empty();
+                let add_clicked = ui
+                    .add_enabled(
+                        can_add,
+                        Button::new(RichText::new("Add").strong().color(if can_add {
+                            theme::ON_ACCENT
+                        } else {
+                            theme::TEXT_FAINT
+                        }))
+                        .fill(if can_add {
+                            theme::ACCENT
+                        } else {
+                            theme::CARD_BG
+                        })
+                        .corner_radius(6)
+                        .min_size(Vec2::new(56.0, height)),
+                    )
+                    .clicked();
+                let response = ui.add(
+                    TextEdit::singleline(&mut self.info_panel_data.new_entry)
+                        .hint_text("New entry, then Enter")
+                        .desired_width(f32::INFINITY)
+                        .background_color(theme::INPUT_BG)
+                        .margin(Margin::symmetric(8, 6)),
+                );
+                let entered = response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter));
+                if (add_clicked || entered) && can_add {
+                    // Keep focus in the field for quick consecutive entries.
+                    response.request_focus();
+                    Some(ListAction::Add(
+                        std::mem::take(&mut self.info_panel_data.new_entry)
+                            .trim()
+                            .to_owned(),
+                    ))
+                } else {
+                    None
+                }
+            },
+        )
+        .inner
+    }
+
+    fn persist_information_list(&self) {
+        let info = self
+            .info_panel_data
+            .information_list
+            .iter()
+            .enumerate()
+            .map(|(i, s)| InformationEntry {
+                position: i,
+                data: s.clone(),
+            })
+            .collect();
+        if let Err(e) = InformationEntry::write_to_file(&self.info_panel_data.data_file_path, &info)
+        {
+            warn!("Failed to write data to file: {e}");
+        }
+    }
+
+    /// Applies the actions and returns whether the list must be persisted.
     fn apply_list_actions(&mut self, actions: Vec<ListAction>) -> bool {
-        let mut has_changed = actions.is_empty();
+        let data = &mut self.info_panel_data;
+        let mut has_changed = false;
 
         for action in actions {
             match action {
                 ListAction::StartEditing(idx) => {
-                    has_changed = true;
-                    self.info_panel_data.editing_index = Some(idx);
+                    data.editing_index = Some(idx);
+                    data.focus_editor = true;
                 }
-
                 ListAction::StopEditing => {
+                    data.editing_index = None;
                     has_changed = true;
-                    self.info_panel_data.editing_index = None;
                 }
-
+                ListAction::Add(text) => {
+                    data.information_list.push(text);
+                    has_changed = true;
+                }
                 ListAction::Delete(idx) => {
-                    if !self.info_panel_data.information_list.is_empty() {
+                    if idx < data.information_list.len() {
+                        data.information_list.remove(idx);
+                        data.editing_index = match data.editing_index {
+                            Some(e) if e == idx => None,
+                            Some(e) if e > idx => Some(e - 1),
+                            other => other,
+                        };
                         has_changed = true;
-                        self.info_panel_data.information_list.remove(idx);
-                        if let Some(editing) = self.info_panel_data.editing_index {
-                            if editing == idx {
-                                self.info_panel_data.editing_index = None;
-                            } else if editing > idx {
-                                self.info_panel_data.editing_index = Some(editing - 1);
-                            }
-                        }
                     }
                 }
-
                 ListAction::MoveUp(idx) => {
-                    if idx > 0 {
+                    if idx > 0 && idx < data.information_list.len() {
+                        data.information_list.swap(idx, idx - 1);
+                        data.editing_index = None;
                         has_changed = true;
-                        self.info_panel_data.information_list.swap(idx, idx - 1);
                     }
                 }
-
                 ListAction::MoveDown(idx) => {
-                    if idx
-                        < self
-                            .info_panel_data
-                            .information_list
-                            .len()
-                            .saturating_sub(1)
-                    {
+                    if idx + 1 < data.information_list.len() {
+                        data.information_list.swap(idx, idx + 1);
+                        data.editing_index = None;
                         has_changed = true;
-                        self.info_panel_data.information_list.swap(idx, idx + 1);
                     }
                 }
             }

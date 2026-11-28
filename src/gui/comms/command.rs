@@ -1,5 +1,3 @@
-use crate::states::knob_value_update::KnobValueUpdate;
-
 #[derive(Debug, Copy, Clone)]
 pub enum CommsCommand {
     Refresh,
@@ -12,9 +10,9 @@ pub enum CommsCommand {
     BlackKeyPressed {
         key: u8,
     },
-    KnobPercentageChanged {
+    KnobTurned {
         knob: u8,
-        value: KnobValueUpdate,
+        steps: i32,
     },
     #[expect(dead_code, reason = "no loop toggle in the GUI yet")]
     LoopPressed,

@@ -85,15 +85,8 @@ impl PlayerLayout {
 }
 
 impl AkaiVisualizer {
-    pub(crate) fn draw_audio_player(&self, ui: &egui::Ui, rect: Rect, scale: f32) {
-        let margin = 15.0 * scale;
+    pub(crate) fn draw_audio_player(&self, ui: &egui::Ui, player_rect: Rect, scale: f32) {
         let content_padding = 14.0 * scale;
-        let player_height = Self::player_height(content_padding, scale);
-
-        let player_rect = Rect::from_min_size(
-            Pos2::new(rect.min.x + margin, rect.max.y - player_height - margin),
-            Vec2::new(margin.mul_add(-2.0, rect.width()), player_height),
-        );
 
         Self::draw_player_background(ui, player_rect, scale);
 
@@ -110,9 +103,6 @@ impl AkaiVisualizer {
             elapsed_ms,
             total_ms,
         );
-        //if progress > 0.0 {
-        //Self::draw_visualizer(ui, player_rect, content_padding, scale, progress);
-        //}
         self.draw_progress_bar(ui, player_rect, content_padding, scale, progress);
         self.draw_playback_buttons(ui, player_rect, content_padding, scale, current_status);
         self.draw_playlist_panel(ui, player_rect, scale);

@@ -105,7 +105,7 @@ impl AkaiVisualizer {
             ui.vertical_centered(|ui| {
                 ui.add_space(50.0);
                 ui.label(
-                    RichText::new("⚠ WebView Error")
+                    RichText::new("WebView Error")
                         .color(Color32::from_rgb(255, 100, 100))
                         .size(18.0),
                 );
@@ -128,10 +128,7 @@ impl AkaiVisualizer {
                             ui.add_space(5.0);
                         }
 
-                        if ui
-                            .button("🔗 Open Web Browser in Separate Window")
-                            .clicked()
-                        {
+                        if ui.button("Open Web Browser in Separate Window").clicked() {
                             Self::create_webview_window();
                         }
                     });
@@ -158,7 +155,7 @@ impl AkaiVisualizer {
                 ui.group(|ui| {
                     ui.vertical_centered(|ui| {
                         ui.label(
-                            RichText::new("⚠ Important")
+                            RichText::new("Important")
                                 .size(14.0)
                                 .color(Color32::from_rgb(255, 200, 100)),
                         );
@@ -189,7 +186,7 @@ impl AkaiVisualizer {
                 ui.group(|ui| {
                     ui.vertical_centered(|ui| {
                         ui.label(
-                            RichText::new("ℹ Note")
+                            RichText::new("Note")
                                 .size(12.0)
                                 .color(Color32::from_rgb(150, 150, 150)),
                         );

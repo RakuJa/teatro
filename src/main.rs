@@ -18,7 +18,6 @@ use crate::states::music_state::MusicState;
 use crate::states::settings_data::SettingsData;
 use crate::states::sound_state::SoundState;
 use crate::states::visualizer::RuntimeData;
-use biquad::Type;
 use dotenvy::dotenv;
 use egui_tracing::tracing::collector::EventCollector;
 use egui_tracing::tracing_subscriber;
@@ -209,9 +208,9 @@ fn prepare_audio_states(
         sound_effect_queue,
     }));
 
-    let music_filter_data = Arc::new(Mutex::new(FilterData::new(1., Type::AllPass)));
-    let ambience_filter = Arc::new(Mutex::new(FilterData::new(1., Type::AllPass)));
-    let sound_effect_filter = Arc::new(Mutex::new(FilterData::new(1., Type::AllPass)));
+    let music_filter_data = Arc::new(Mutex::new(FilterData::new()));
+    let ambience_filter = Arc::new(Mutex::new(FilterData::new()));
+    let sound_effect_filter = Arc::new(Mutex::new(FilterData::new()));
 
     (
         MusicState {

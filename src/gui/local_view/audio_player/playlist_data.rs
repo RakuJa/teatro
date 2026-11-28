@@ -1,4 +1,5 @@
 use crate::gui::comms::command::CommsCommand;
+use crate::gui::icons::Icon;
 use crate::gui::local_view::audio_player::button_style::{ButtonStyle, draw_button};
 use crate::gui::local_view::audio_player::utils::{
     format_time, is_playlist_open, set_playlist_open, title_from_path,
@@ -91,22 +92,7 @@ impl AkaiVisualizer {
     }
 }
 
-pub fn draw_playlist_toggle(
-    ui: &egui::Ui,
-    player_rect: Rect,
-    content_padding: f32,
-    scale: f32,
-    button_index: usize,
-) {
-    let button_size = Vec2::new(28.0 * scale, 24.0 * scale);
-    let button_spacing = 8.0 * scale;
-    let x = (button_size.x + button_spacing)
-        .mul_add(button_index as f32, player_rect.min.x + content_padding);
-    let rect = Rect::from_min_size(
-        Pos2::new(x, player_rect.min.y + content_padding),
-        button_size,
-    );
-
+pub fn draw_playlist_toggle(ui: &egui::Ui, rect: Rect, scale: f32) {
     let open = is_playlist_open(ui.ctx());
     let style = ButtonStyle::new(scale).active_color(if open {
         Color32::from_rgb(120, 200, 140)
@@ -114,7 +100,7 @@ pub fn draw_playlist_toggle(
         Color32::from_rgb(60, 60, 70)
     });
 
-    let response = draw_button(ui, rect, &style, "☰", 13.0 * scale, "playlist_btn");
+    let response = draw_button(ui, rect, &style, Icon::List, 14.0 * scale, "playlist_btn");
     if response.clicked() {
         set_playlist_open(ui.ctx(), !open);
         // Force a re-scroll to the current track whenever the panel is (re)opened

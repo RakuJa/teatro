@@ -1,15 +1,14 @@
 use crate::MusicState;
 use crate::audio::playback_handler;
 use crate::backend::hw_handler::MidiHandler;
-use crate::os_explorer::explorer::{
-    files_in_nth_subdir, get_album_name_from_folder_in_path, map_to_indexed_vec,
-};
+use crate::os_explorer::explorer::{list_albums, nth_album_files};
 use crate::states::audio_sinks::AudioSinks;
 use crate::states::button_states::ToggleStates;
-use crate::states::filter_data::FilterData;
+use crate::states::filter_data::{
+    AMBIENCE_FILTER_KNOBS, FilterChain, FilterData, MUSIC_FILTER_KNOBS, SOUND_EFFECT_FILTER_KNOBS,
+};
 use crate::states::knob_value_update::KnobValueUpdate;
 use crate::states::visualizer::RuntimeData;
-use biquad::Type;
 use flume::Sender;
 use ramidier::enums::button::knob_ctrl::KnobCtrlKey;
 use ramidier::enums::button::pads::PadKey;
@@ -23,7 +22,8 @@ use rodio::Player;
 use std::sync::{Arc, Mutex};
 use tracing::{debug, info, warn};
 
-const KNOB_INCREMENT: f32 = 0.005;
+/// Knob position change for a single encoder tick (0.5%).
+pub const KNOB_INCREMENT: f32 = 0.005;
 
 impl ToggleStates {
     pub fn toggle_button<T: Into<u8> + Copy>(
@@ -92,12 +92,10 @@ impl MidiHandler for PadHandler {
 
 impl PadHandler {
     pub fn get_pad_albums_list(music_folder: &str) -> anyhow::Result<Vec<String>> {
-        Ok(
-            map_to_indexed_vec(get_album_name_from_folder_in_path(music_folder)?)
-                .into_iter()
-                .flatten()
-                .collect(),
-        )
+        Ok(list_albums(music_folder)?
+            .into_iter()
+            .map(|album| album.label)
+            .collect())
     }
 
     pub fn update_pad_albums_list(
@@ -162,7 +160,7 @@ impl PadHandler {
         match input_group {
             PadsAndKnobsInputGroup::Pads(ref pad) => Self::handle_pad(*pad, state, midi_out),
             PadsAndKnobsInputGroup::Knob(index) => {
-                Self::handle_knob(index, KnobValueUpdate::from(value), state);
+                Self::handle_knob(index, KnobValueUpdate::from(value).into(), state);
             }
             PadsAndKnobsInputGroup::ResumePause => Self::handle_resume_pause(state, midi_out),
             PadsAndKnobsInputGroup::SoftKeys(key) => Self::handle_soft_key(key, state, midi_out),
@@ -240,7 +238,7 @@ impl PadHandler {
             )
         };
 
-        let Ok((dir, paths)) = files_in_nth_subdir(&folder, note as usize) else {
+        let Ok((dir, paths)) = nth_album_files(&folder, note as usize) else {
             warn!("No folder associated with pad {note}");
             return;
         };
@@ -277,41 +275,50 @@ impl PadHandler {
         }
     }
 
-    fn handle_knob(index: u8, value: KnobValueUpdate, state: &MusicState) {
-        let delta = value.into();
-        if let Ok(mut data) = state.data.lock() {
-            match index {
-                1 => {
-                    if !data.button_states.contains(ToggleStates::MUTE) {
-                        adjust_queue_volume(state, |s| &s.music_queue, delta);
-                    }
-                }
-                2..=4 => {
-                    let filter_type = match index {
-                        2 => Type::LowPass,
-                        3 => Type::HighPass,
-                        4 => Type::SinglePoleLowPassApprox,
-                        _ => unreachable!(
-                            "The previous guard should always filter number higher than 4 and lower than 2"
-                        ),
-                    };
-                    adjust_filter(&state.music_filter, delta, filter_type);
-                }
-                5 => adjust_queue_volume(state, |s| &s.ambience_queue, delta),
-                6 => adjust_filter(&state.ambience_filter, delta, Type::LowPass),
-                7 => adjust_queue_volume(state, |s| &s.sound_effect_queue, delta),
-                8 => adjust_filter(&state.sound_effect_filter, delta, Type::HighPass),
-                _ => {}
-            }
-            if !data.button_states.contains(ToggleStates::MUTE) {
-                data.knob_values.entry(index).and_modify(|v| {
-                    *v = delta.mul_add(KNOB_INCREMENT, *v);
-                    *v = v.clamp(0.0, 1.0);
-                });
-            }
-        } else {
-            warn!("Failed to get a lock on data. Will not handle knob action");
+    pub fn turn_knob(index: u8, steps: i32, state: &MusicState) {
+        if steps != 0 {
+            Self::handle_knob(index, steps as f32, state);
         }
+    }
+
+    fn handle_knob(index: u8, delta: f32, state: &MusicState) {
+        let Ok(mut data) = state.data.lock() else {
+            warn!("Failed to get a lock on data. Will not handle knob action");
+            return;
+        };
+        // While muted, knob 1 holds the volume to restore on unmute.
+        if index == 1 && data.button_states.contains(ToggleStates::MUTE) {
+            return;
+        }
+
+        let value = data.knob_values.entry(index).or_insert(0.0);
+        *value = snap_to_tick(delta.mul_add(KNOB_INCREMENT, *value));
+
+        match index {
+            1 => adjust_queue_volume(state, |s| &s.music_queue, delta),
+            5 => adjust_queue_volume(state, |s| &s.ambience_queue, delta),
+            7 => adjust_queue_volume(state, |s| &s.sound_effect_queue, delta),
+            2..=4 => Self::apply_music_filter(state, &data),
+            6 => apply_filter(
+                &state.ambience_filter,
+                FilterChain::from_knobs(&data.knob_values, AMBIENCE_FILTER_KNOBS),
+            ),
+            8 => apply_filter(
+                &state.sound_effect_filter,
+                FilterChain::from_knobs(&data.knob_values, SOUND_EFFECT_FILTER_KNOBS),
+            ),
+            _ => {}
+        }
+    }
+
+    fn apply_music_filter(state: &MusicState, data: &RuntimeData) {
+        let chain = FilterChain::from_knobs(&data.knob_values, MUSIC_FILTER_KNOBS);
+        let chain = if data.button_states.contains(ToggleStates::FILTER) {
+            chain.muffled()
+        } else {
+            chain
+        };
+        apply_filter(&state.music_filter, chain);
     }
 
     fn handle_resume_pause(state: &MusicState, midi_out: Option<&mut ChannelOutput>) {
@@ -323,19 +330,8 @@ impl PadHandler {
                 LedColor::Green,
             );
 
-            if let Ok(filter) = state.music_filter.lock() {
-                let filter_type = if data.button_states.contains(ToggleStates::FILTER) {
-                    playback_handler::change_filter_frequency_value(&filter, 1., Type::LowPass);
-                    Type::LowPass
-                } else {
-                    playback_handler::change_filter_frequency_value(&filter, 0., Type::AllPass);
-                    Type::AllPass
-                };
-
-                playback_handler::change_filter_frequency_value(&filter, 1., filter_type);
-            } else {
-                warn!("Failed to change filter frequency value: cannot acquire lock on filter");
-            }
+            // Muffle toggle: forces a low-pass on top of the knob settings.
+            Self::apply_music_filter(state, &data);
         }
     }
 
@@ -460,12 +456,16 @@ fn adjust_queue_volume(
     }
 }
 
-fn adjust_filter(filter: &Arc<Mutex<FilterData>>, delta: f32, filter_type: Type<f32>) {
+fn apply_filter(filter: &Arc<Mutex<FilterData>>, chain: FilterChain) {
     if let Ok(f) = filter.lock() {
-        playback_handler::change_filter_frequency_value(&f, delta, filter_type);
+        f.set(chain);
     } else {
-        warn!("Failed to change filter frequency value: cannot acquire lock on filter");
+        warn!("Failed to update filter: cannot acquire lock on filter");
     }
+}
+
+fn snap_to_tick(value: f32) -> f32 {
+    (value.clamp(0.0, 1.0) / KNOB_INCREMENT).round() * KNOB_INCREMENT
 }
 
 fn change_button_status<T>(

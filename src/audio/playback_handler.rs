@@ -2,7 +2,6 @@ use crate::FilterData;
 use crate::audio::audio_filter::FilteredSource;
 use crate::backend::errors::PlaybackError;
 use crate::states::playlist_data::Track;
-use biquad::Type;
 use rodio::{Player, Source};
 use std::time::Duration;
 use tracing::warn;
@@ -33,14 +32,6 @@ pub fn seek_to_fraction(
         0.
     };
     seek_to(sink, total.mul_f32(fraction), total)
-}
-
-/// Moves the filter cutoff by `delta` percentage points and rebuilds the coefficients.
-///
-/// The stored percentage is clamped to `[1, 50]`, so it can't wind up past
-/// the point where the cutoff stops changing.
-pub fn change_filter_frequency_value(filter: &FilterData, delta: f32, filter_type: Type<f32>) {
-    filter.adjust(delta, filter_type);
 }
 
 /// Sets the volume, clamped to `[0, 1]`, and returns the value actually applied.

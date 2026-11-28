@@ -9,7 +9,7 @@ use tracing::log::warn;
 
 const DEFAULT_MAX_REPAINT_HZ: f32 = 30.0;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct SettingsData {
     pub(crate) music_folder: String,
     pub(crate) ambience_folder: String,

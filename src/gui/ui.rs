@@ -1,5 +1,7 @@
 use crate::gui::comms::command::CommsCommand;
 use crate::gui::local_view::audio_player_states::PlayerInfo;
+use crate::gui::navigation::CurrentTab;
+use crate::gui::settings_view::settings::SettingsViewState;
 use crate::states::information_data::InformationEntry;
 use crate::states::settings_data::SettingsData;
 use crate::states::visualizer::RuntimeData;
@@ -11,14 +13,6 @@ use flume::Sender;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tracing::warn;
-
-#[derive(PartialEq, Eq, Clone, Copy)]
-pub enum CurrentTab {
-    Visualizer,
-    WebView,
-    Settings,
-    LogViewer,
-}
 
 pub struct GuiData {
     pub(crate) data: RuntimeData,
@@ -46,6 +40,7 @@ pub struct AkaiVisualizer {
     pub(crate) gui_data: Arc<Mutex<GuiData>>,
     pub(crate) info_panel_data: InfoPanelData,
     pub(crate) settings_data: SettingsData,
+    pub(crate) settings_view: SettingsViewState,
     pub(crate) current_tab: CurrentTab,
     pub(crate) webview_error: Option<String>,
     pub(crate) event_collector: EventCollector,
@@ -55,6 +50,8 @@ pub struct InfoPanelData {
     pub(crate) data_file_path: String,
     pub(crate) information_list: Vec<String>,
     pub(crate) editing_index: Option<usize>,
+    pub(crate) new_entry: String,
+    pub(crate) focus_editor: bool,
 }
 
 impl AkaiVisualizer {
@@ -77,6 +74,9 @@ impl AkaiVisualizer {
             },
         ];
         load_fonts(&cc.egui_ctx, fonts).expect("Font should be readable.");
+        let settings = settings_data
+            .lock()
+            .map_or_else(|_| SettingsData::default(), |s| s.clone());
 
         Self {
             gui_data,
@@ -88,10 +88,11 @@ impl AkaiVisualizer {
                     .map(|x| x.data.clone())
                     .collect(),
                 editing_index: None,
+                new_entry: String::new(),
+                focus_editor: false,
             },
-            settings_data: settings_data
-                .lock()
-                .map_or_else(|_| SettingsData::default(), |s| s.clone()),
+            settings_view: SettingsViewState::new(settings.clone()),
+            settings_data: settings,
             current_tab: CurrentTab::Visualizer,
             webview_error: None,
             event_collector,
@@ -100,7 +101,7 @@ impl AkaiVisualizer {
 }
 
 impl eframe::App for AkaiVisualizer {
-    fn ui(&mut self, ctx: &mut Ui, _: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut Ui, _: &mut eframe::Frame) {
         #[cfg(feature = "profiling")]
         puffin_egui::puffin::profile_function!();
         let now = Instant::now();
@@ -118,33 +119,17 @@ impl eframe::App for AkaiVisualizer {
         if need_refresh {
             self.send_command_to_backend(CommsCommand::Refresh {});
         }
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.selectable_value(&mut self.current_tab, CurrentTab::Visualizer, "Teatro core");
-                #[cfg(feature = "bybe")]
-                {
-                    ui.selectable_value(
-                        &mut self.current_tab,
-                        CurrentTab::WebView,
-                        "web BYBE - Shop & Encounters",
-                    );
-                };
-                ui.selectable_value(&mut self.current_tab, CurrentTab::Settings, "Settings");
-                ui.selectable_value(&mut self.current_tab, CurrentTab::LogViewer, "Log viewer");
-            });
-            ui.separator();
 
-            match self.current_tab {
-                CurrentTab::Visualizer => self.render_visualizer_tab(ui),
-                CurrentTab::WebView => {
-                    #[cfg(feature = "bybe")]
-                    {
-                        self.render_webview_tab(ui);
-                    }
-                }
-                CurrentTab::Settings => self.render_settings_tab(ui),
-                CurrentTab::LogViewer => self.render_logviewer_tab(ui),
-            }
+        self.handle_tab_shortcuts(ui);
+        self.show_header(ui);
+        self.show_status_bar(ui);
+
+        egui::CentralPanel::default().show(ui, |ui| match self.current_tab {
+            CurrentTab::Visualizer => self.render_visualizer_tab(ui),
+            #[cfg(feature = "bybe")]
+            CurrentTab::WebView => self.render_webview_tab(ui),
+            CurrentTab::Settings => self.render_settings_tab(ui),
+            CurrentTab::LogViewer => self.render_logviewer_tab(ui),
         });
     }
 }

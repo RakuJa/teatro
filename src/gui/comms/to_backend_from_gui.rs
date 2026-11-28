@@ -50,13 +50,8 @@ pub fn handle_gui_command_and_relay_them_to_backend(
             CommsCommand::BlackKeyPressed { key } | CommsCommand::WhiteKeyPressed { key } => {
                 KeyboardHandler::handle_input(KeyboardInputGroup::Key(key), sound_state);
             }
-            CommsCommand::KnobPercentageChanged { knob, value } => {
-                press(
-                    midi_out_channel,
-                    PadsAndKnobsInputGroup::Knob(knob),
-                    value.into(),
-                    music_state,
-                );
+            CommsCommand::KnobTurned { knob, steps } => {
+                PadHandler::turn_knob(knob, steps, music_state);
                 refresh_backend(tx_command);
             }
             CommsCommand::ShufflePressed => press(

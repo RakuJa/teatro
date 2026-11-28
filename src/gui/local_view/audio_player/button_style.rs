@@ -1,5 +1,6 @@
+use crate::gui::icons::{self, Icon};
 use eframe::emath::Rect;
-use eframe::epaint::{Color32, FontId};
+use eframe::epaint::Color32;
 
 pub struct ButtonStyle {
     bg_color: Color32,
@@ -28,7 +29,7 @@ pub fn draw_button(
     ui: &egui::Ui,
     rect: Rect,
     style: &ButtonStyle,
-    icon: &str,
+    icon: Icon,
     icon_size: f32,
     id: &str,
 ) -> egui::Response {
@@ -40,11 +41,10 @@ pub fn draw_button(
         egui::Stroke::new(style.border_width, style.border_color),
         egui::StrokeKind::Outside,
     );
-    ui.painter().text(
-        rect.center(),
-        egui::Align2::CENTER_CENTER,
+    icons::paint(
+        ui.painter(),
         icon,
-        FontId::proportional(icon_size),
+        Rect::from_center_size(rect.center(), egui::Vec2::splat(icon_size)),
         Color32::from_rgb(240, 240, 250),
     );
 
